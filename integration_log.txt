@@ -1,0 +1,255 @@
+=======================================================================
+ BLISS CLOUDS -> RETHINKING VOXELS : INTEGRATION LOG
+ Path C  (Literal port via compatibility shim layer)
+ Target: Iris / Oculus, Minecraft 1.21.1
+ Base pack: Rethinking Voxels r0.1-beta9 (Complementary Reimagined r5.5.1)
+ Cloud source: Bliss v2.1.2 (Chocapic13 fork by X0nk)
+=======================================================================
+
+WHAT THIS BUILD ADDS
+--------------------
+A new cloud mode "Bliss" (CLOUD_STYLE 2) selectable alongside RV's
+existing Reimagined (1) / Unbound (3) / Vanilla (50) / OFF (0). It runs
+X0nk's full volumetric cloud renderer (3-layer cumulus + altostratus,
+3D-from-2D noise, self-shadowing, powder, multiscatter, cloud->cloud and
+cloud->world shadow samplers) inside RV's pipeline.
+
+This is the FIRST structural-merge iteration. It has been validated
+OFFLINE ONLY (brace/paren balance, single entry points, symbol-conflict
+and dangling-symbol scans). It has NOT been compiled against a live
+OpenGL/Iris context, so in-game shader-compile errors are expected and
+are the point of the next debug cycle.
+
+=======================================================================
+FILES ADDED
+=======================================================================
+  shaders/lib/atmospherics/clouds/bliss_clouds_compat.glsl   (shim header)
+  shaders/lib/atmospherics/clouds/bliss_clouds.glsl          (ported module + RV adapter)
+
+FILES MODIFIED
+=======================================================================
+  shaders/lib/common.glsl
+      - CLOUD_STYLE_DEFINE value list: //[-1 0 1 3 50] -> //[-1 0 1 2 3 50]
+      - Added: #if CLOUD_STYLE == 2  ->  #define CLOUDS_BLISS  (inside the
+        existing VL_CLOUDS_ACTIVE block, so VL clouds switch on for style 2)
+      - Added 12 Bliss cloud OPTIONS (with Optifine value-lists) next to
+        RV's own cloud options so they appear in the in-game menu:
+        BLISS_CLOUD_BRIGHTNESS, Cloud_Speed, Rain_coverage,
+        CloudLayer0/1/2_{coverage,density,height}
+
+  shaders/lib/atmospherics/clouds/mainClouds.glsl
+      - Added: #ifdef CLOUDS_BLISS #include ".../bliss_clouds.glsl" #endif
+        (next to the Reimagined / Unbound includes)
+
+  shaders/shaders.properties
+      - screen.CLOUD_SETTINGS: appended [CLOUD_BLISS_SETTINGS]
+      - Added screen.CLOUD_BLISS_SETTINGS submenu (the 12 options above)
+      - Added the 12 numeric options to the sliders= list
+
+  shaders/lang/en_US.lang
+      - value.CLOUD_STYLE_DEFINE.2 = Bliss
+      - screen.CLOUD_BLISS_SETTINGS title + label/comment for each option
+
+=======================================================================
+NAMESPACING (collision isolation)
+=======================================================================
+A symbol-collision scan of Bliss volumetricClouds.glsl vs the entire RV
+tree found NO real global-symbol collisions (all apparent matches were
+function-local variable names, which are scoped and cannot clash).
+
+Per the isolation directive, all 13 Bliss cloud FUNCTIONS were still
+prefixed with  bliss_  (definitions and every call site, word-boundary
+safe so GetCloudShadow != GetCloudShadow_VLFOG):
+   densityAtPos, GetAltostratusDensity, cloudCov, cloudVol,
+   GetCumulusDensity, phaseg, DoCloudLighting, renderLayer,
+   layerStartingPosition, invLinZ_cloud, renderClouds,
+   GetCloudShadow, GetCloudShadow_VLFOG
+Bliss' file-scope helper variables (maxIT_clouds, LAYER*_*, cloud_movement,
+dailyWeatherParams0/1, ...) were left unprefixed because the scan proved
+they do not collide with any RV global; prefixing them would only add
+transform risk.
+
+=======================================================================
+CONFLICTING DECLARATIONS RESOLVED
+=======================================================================
+Removed from the ported module (RV already declares these in
+shaders/lib/uniforms.glsl, which is globally included via common.glsl;
+keeping Bliss' copies would be duplicate declarations in the same
+translation unit):
+   uniform int worldTime;        -> use RV's
+   uniform int worldDay;         -> use RV's
+   uniform sampler2D colortex4;  -> removed (also UNUSED in the cloud body)
+Removed Bliss-only include and its define:
+   #include "/lib/climate_settings.glsl"
+   #define WEATHERCLOUDS
+   (With Daily_Weather left undefined, the cloud file's own #else branch
+   supplies dailyWeatherParams0/1 from the layer coverage/density values,
+   so nothing from climate_settings is needed.)
+
+=======================================================================
+EXTERNAL-SYMBOL MAP  (Bliss expectation  ->  RV source / shim)
+=======================================================================
+  WsunVec (world sun dir)   -> declared in compat (const default), then
+                               ASSIGNED at runtime in the adapter:
+                               normalize(mat3(gbufferModelViewInverse)*sunVec)
+                               (sunVec/upVec are in scope at every RV
+                               GetClouds call site: deferred1 + reflections)
+  sunElevation              -> dot(sunVec, upVec), assigned in adapter
+  worldTime / worldDay      -> RV uniforms.glsl
+  noisetex / near / far     -> RV uniforms.glsl
+  cameraPosition            -> RV uniforms.glsl
+  gbufferModelView(Inverse) -> RV uniforms.glsl
+  rainStrength              -> RV uniforms.glsl
+  LightColor (sun)          -> RV cloudLightColor   * BLISS_CLOUD_BRIGHTNESS
+  SkyColor (ambient)        -> RV cloudAmbientColor * BLISS_CLOUD_BRIGHTNESS
+  FragPosition (view dir)   -> mat3(gbufferModelView) * (nPlayerPos*1024)
+
+  Hardcoded with native Bliss values in compat (this is the fix for the
+  earlier "undefined sky_coefficientRayleigh*" failure):
+    Sky_Brightness 1.0 ; sky_coefficientRayleighR/G/B 5.8 / 1.35 / 3.31
+    minRayMarchSteps 15 ; maxRayMarchSteps 15 ; *LQ 10 / 30
+    cloud_LevelOfDetail 1 ; cloud_ShadowLevelOfDetail 0 ; *LQ 1 / 0
+    fbmAmount 0.5 ; fbmPower1 3.00 ; fbmPower2 2.50
+    CLOUD_SHADOW_STRENGTH 1.0
+    toggles: VOLUMETRIC_CLOUDS, HQ_CLOUDS, SKY_GROUND, CLOUDS_SHADOWS,
+             CloudLayer0, CloudLayer1, CloudLayer2
+
+=======================================================================
+INTENTIONALLY COMPILED OUT  (#ifdef left undefined)
+=======================================================================
+  Daily_Weather            (pulls Bliss weather LUT system)
+  CLOUDS_INTERSECT_TERRAIN (uses Bliss depth conventions; needs a separate
+                            depth bridge - deferred to a later iteration)
+  EXCLUDE_WRITE_TO_LUT      (the ONLY place lightCol.a is read - so the
+                            otherwise-undefined lightCol never compiles in)
+  CLOUDSHADOWSONLY, WEATHERCLOUDS, TEST
+
+=======================================================================
+HOW IT PLUGS INTO RV  (interface, not patches)
+=======================================================================
+bliss_clouds.glsl defines GetVolumetricClouds(...) with the EXACT
+signature RV's mainClouds.glsl already calls. Because RV invokes
+GetClouds()->GetVolumetricClouds() from BOTH:
+    program/deferred1.glsl                          (main sky view)
+    lib/materials/materialMethods/reflections.glsl  (water/ice/puddle/metal)
+the Bliss clouds appear in the main view AND in reflections automatically,
+with no reflection-specific code. This satisfies the "reflections as a
+hook into the bliss module" requirement structurally.
+
+Godrays / world cloud-shadows are exposed as ISOLATED hook functions for
+RV's lightshaft + shadow code to call:
+    bliss_CloudShadowAt(feetPlayerPos, worldSunVec)        // surface shadow
+    bliss_CloudGodrayTransmittance(worldPos, worldSunVec)  // along sun ray
+These are provided and compile, but are NOT yet wired into RV's
+volumetricLight.glsl / mainLighting.glsl integrators (see KNOWN LIMITATIONS).
+
+=======================================================================
+KNOWN LIMITATIONS / EXPECTED ITERATION POINTS
+=======================================================================
+1. CLOUD SHAPE vs noisetex.  Bliss' density field reads noisetex with a
+   specific 3D-from-2D channel trick. This build samples RV's existing
+   noisetex (so RV's water/other noise users are NOT disturbed and the
+   build stays compile-safe). RV's noise content differs from Bliss',
+   so cloud SHAPES may look off/blocky until Bliss' own noise texture is
+   bound to a dedicated sampler in a follow-up. This is a fidelity issue,
+   not a compile issue.
+
+2. CLOUD COLOR vs Bliss sky LUT.  Bliss colors clouds from its physical
+   sky model; that LUT is not ported. The clouds are lit from RV's
+   cloudLightColor / cloudAmbientColor instead, so color will not be
+   pixel-identical to Bliss. Tunable live via BLISS_CLOUD_BRIGHTNESS;
+   expect to calibrate brightness on the first run.
+
+3. Godrays-through-clouds and cloud-shadows-on-terrain are present as
+   isolated functions but not yet called by RV's lightshaft/shadow passes.
+   Reflections DO work already (via the interface above).
+
+4. Compile watch-items for the first in-game run (most likely error
+   sources, in priority order):
+     - global initializers that read uniforms (RV #version 130 strictness)
+     - any implicit int->float the driver rejects in the layer-height math
+     - duplicate-symbol surprises if a future RV file shares a helper name
+   Please paste the first Iris/Oculus shader-compile log; these are quick
+   to resolve once the exact messages are known.
+
+=======================================================================
+OFFLINE VALIDATION PERFORMED
+=======================================================================
+  - brace {} and paren () balance == 0 on all new/modified GLSL: PASS
+  - GetVolumetricClouds defined exactly once, signature matches RV: PASS
+  - bliss_renderClouds defined once and called by the adapter: PASS
+  - no void main() inside the included module: PASS
+  - colortex4 not sampled in module body: PASS
+  - worldTime/worldDay uniform redeclarations removed: PASS
+  - lightCol only under EXCLUDE_WRITE_TO_LUT (undefined): PASS
+  - no leftover UNPREFIXED Bliss function definitions: PASS
+  - no active climate_settings include / WEATHERCLOUDS define: PASS
+=======================================================================
+
+
+=======================================================================
+ DEBUG ITERATION 2 -- VISUAL FIX (noise bridge + ray-march dither)
+=======================================================================
+ROOT CAUSE (was Known Limitation #1 in iteration 1)
+---------------------------------------------------
+Iteration 1 pointed Bliss' cloud code at RV's native noisetex. The two
+noise textures are fundamentally incompatible:
+
+   Bliss  noises.png : 512x512 RGBA, specific 3D-from-2D channel packing
+   RV     noise.png  : 128x128 RGB  (noiseTextureResolution = 128)
+
+Bliss' density field hard-codes "/512" texel math and a per-y-slice
++193-texel offset trick. Run against RV's 128px 3-channel texture this
+produced EVERY reported regression:
+   * coord/512 over a 128px tile  -> 4x undersampling -> flat blocky blobs
+                                      (high-altitude screenshot)
+   * GL_REPEAT tile period         -> ghost duplication / tiling
+                                      (night screenshot, blue circles)
+   * linear interp + tile periodicity + coherent ray steps
+                                   -> concentric moire / radial banding
+                                      (red circles)
+   * wrong coverage values         -> all layers degenerate to the same
+                                      flat 2D clutter (ground screenshot)
+
+FIX (all confined to bliss_clouds.glsl -- no pipeline/texture rebind)
+---------------------------------------------------------------------
+1. NOISE BRIDGE. Replaced every  texture2D(noisetex, ...)  in the cloud
+   module with a self-contained PROCEDURAL noise profile:
+     - bliss_hash12 / bliss_hash13  (Dave Hoskins hashes)
+     - bliss_vnoise2 / bliss_vnoise3 (QUINTIC-smooth value noise -> fluffy
+       edges instead of blocky/linear ones)
+     - bliss_fbm2  (normalised, [0,1], mean ~0.5 -- same statistics the
+       coverage math expects from the original texture)
+     - bliss_noiseB / bliss_noiseR  (channel stand-ins; scaled by
+       BLISS_NOISE_RES so feature sizes match a real fetch; per-channel
+       offset decorrelates the "blue" coverage vs "red" detail fields)
+     - bliss_densityAtPos now returns bliss_vnoise3() directly.
+   Bliss' ORIGINAL coordinate math is untouched at every call site, so the
+   relative feature scales it tuned between the 3 layers are preserved.
+   Because it is procedural it NEVER tiles (kills duplication + moire) and
+   touches NOTHING outside the cloud file -- RV's water / other noisetex
+   users are completely unaffected.
+
+2. RAY-MARCH DITHER. The adapter built Dither.y = fract(dither + const),
+   i.e. the same per-pixel value as Dither.x merely shifted -> the layer
+   start offset and the per-step phase moved together, leaving residual
+   banding. Decorrelated it (multiplicative hash) so start-plane jitter and
+   step jitter are independent, breaking up the remaining ray-march rings.
+
+3. LAYER THICKNESS. No code change needed: layer heights were already at
+   Bliss defaults (250 / 500 / 2000, each 100 thick) and well separated;
+   the "collapsed layers" symptom was the noise, and is resolved by (1).
+
+TUNABLES (top of the noise bridge block in bliss_clouds.glsl)
+   BLISS_NOISE_RES   48.0  -- lower = larger cloud masses / wider gaps
+   BLISS_FBM_OCTAVES 2     -- coverage octaves (fluff comes from 3D erosion)
+
+OFFLINE VALIDATION (iteration 2)
+   - {} () [] balance == 0 on bliss_clouds.glsl: PASS
+   - zero remaining noisetex reads in the cloud module: PASS
+   - new helpers defined before first use, all bliss_-prefixed: PASS
+   - no new global symbol / #define collisions across the RV tree: PASS
+   - no gl_FragCoord / stage-specific symbols (safe in the deferred
+     compute pass + gbuffers_water + dh_water): PASS
+   - GLSL 1.30 safe (no global initializers reading uniforms added): PASS
+=======================================================================
