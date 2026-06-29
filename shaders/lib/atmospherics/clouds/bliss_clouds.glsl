@@ -103,8 +103,8 @@ float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_S
 
 // Coverage: world distance over which the big masses vary.
 //   1/BLISS_COVER_SCALE = mass size in blocks. 0.00045 -> ~2200-block masses.
-#define BLISS_COVER_SCALE 0.00045     // SMALLER = bigger, more sweeping cloud masses
-#define BLISS_ANISO 0.55              // <1 stretches masses along X into long pancake bands
+#define BLISS_COVER_SCALE 0.0010      // SMALLER = bigger masses. 0.0010 -> ~1000-block masses (sweeping but with visible shape + parallax)
+#define BLISS_ANISO 0.70              // <1 stretches masses along X into bands (closer to 1 = rounder, less "tube")
 #define BLISS_COVER_GAIN 0.72         // scales the in-game CloudLayerN_coverage slider (0.7*0.72 ~= 0.5 = open sky)
 #define BLISS_EDGE 0.30               // width of the soft coverage onset (bigger = softer/larger edges)
 
@@ -114,6 +114,13 @@ float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_S
 #define BLISS_ERODE_OCTAVES 3
 #define BLISS_ERODE_AMOUNT 0.55       // 0..1 how deeply erosion bites the masses
 
+// High-frequency fluff: micro-detail carved into cloud EDGES so the masses
+// read as organic cloud instead of smooth plastic. It is faded out at grazing
+// view angles (bliss_rayVerticality) where ray steps are huge -- that fade is
+// exactly what stops fine detail from aliasing back into the old "spikes".
+#define BLISS_FLUFF_SCALE 0.022       // ~45-block micro detail (finest octave ~22 blocks)
+#define BLISS_FLUFF_AMOUNT 0.55       // 0..1 how deeply the fluff bites the edges
+
 // Vertical volume: fraction of the layer thickness used as the soft base
 // ramp and the soft top taper (gives heavy 3D volume, not a 2D plane).
 #define BLISS_BASE_FRAC 0.22          // bottom ramp-up over this fraction of layer height
@@ -122,6 +129,17 @@ float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_S
 // Altostratus (high thin layer 2). Coverage comes from the in-game
 // CloudLayer2_coverage slider (via LAYER2_COVERAGE) so the menu still works.
 #define BLISS_ALTO_SCALE 0.00018      // very large, sweeping high sheets
+
+// --- Runtime globals (set per-call by the adapter / renderer; NOT constants) ---
+// bliss_terrainDist:    world distance to solid terrain along this pixel's ray
+//                       (1e9 on sky pixels). The raymarch stops once it travels
+//                       past this, so clouds no longer draw over / through
+//                       mountains and blocks (depth occlusion -- bug fix).
+// bliss_rayVerticality: abs(view-ray .y); ~1 looking up, ~0 at the horizon.
+//                       Fades the high-frequency fluff out at grazing angles so
+//                       it can never alias into spikes.
+float bliss_terrainDist    = 1e9;
+float bliss_rayVerticality = 1.0;
 
 // Dave Hoskins style hashes (high quality, no visible lattice patterning).
 float bliss_hash12(vec2 p){
@@ -278,6 +296,20 @@ float bliss_GetCumulusDensity(int layer, in vec3 pos, in int LoD, float minHeigh
 		float er = bliss_quintic(bliss_fbm3(ep));
 		// bite edges harder than cores (weight by 1-cloud)
 		cloud *= 1.0 - er * BLISS_ERODE_AMOUNT * (1.0 - cloud);
+
+		// High-frequency fluff: organic micro-detail on the edges. Faded by
+		// view verticality so it is full strength overhead (small, densely
+		// sampled ray steps) and gone toward the horizon (huge steps) -- this
+		// is what lets us add fine detail WITHOUT the detail aliasing into spikes.
+		float fluffFade = bliss_quintic(clamp((bliss_rayVerticality - 0.30) / 0.40, 0.0, 1.0));
+		if (fluffFade > 0.0){
+			vec3 fp = pos * BLISS_FLUFF_SCALE;
+			fp.xz *= 0.6;
+			// two-octave quintic value noise; finest octave kept coarse enough
+			// (~half the base) to stay sampled near the camera.
+			float fluff = bliss_vnoise3(fp) * 0.65 + bliss_vnoise3(fp * 2.0 + 7.3) * 0.35;
+			cloud *= 1.0 - bliss_quintic(fluff) * BLISS_FLUFF_AMOUNT * fluffFade * (1.0 - cloud);
+		}
 	}
 
 	return clamp(cloud, 0.0, 1.0);
@@ -345,22 +377,14 @@ vec4 bliss_renderLayer(
 	float TOTAL_EXTINCTION = 1.0;
 	bool IntersecTerrain = false;
 
-	#ifdef CLOUDS_INTERSECT_TERRAIN
-		// thank you emin for this world intersection thing
-		#if defined DISTANT_HORIZONS
-			float maxdist = dhRenderDistance + 16 * 32;
-		#else
-			float maxdist = far + 16*5;
-		#endif
-
-   		float lViewPosM = length(FragPosition) < maxdist ? length(FragPosition) - 1.0 : 100000000.0;
-	#endif
+	// Terrain depth occlusion. bliss_terrainDist is the world distance to solid
+	// geometry on this pixel (1e9 on sky pixels), supplied by RV in the adapter.
+	// Bliss' own FragPosition-based estimate was wrong in this port (FragPosition
+	// is a normalized direction * 1024), so it is replaced with RV's real value.
 
 if(layer == 2){
-	
-	#ifdef CLOUDS_INTERSECT_TERRAIN
-		IntersecTerrain = length(rayProgress - cameraPosition) > lViewPosM;
-	#endif
+
+	IntersecTerrain = length(rayProgress - cameraPosition) > bliss_terrainDist;
 
 	if(notVisible || IntersecTerrain) return vec4(COLOR, TOTAL_EXTINCTION);
 	
@@ -404,10 +428,9 @@ if(layer == 2){
 	float expFactor = 11.0;
 	for(int i = 0; i < QUALITY; i++) {
 
-		#ifdef CLOUDS_INTERSECT_TERRAIN
-			IntersecTerrain = length(rayProgress - cameraPosition) > lViewPosM;
-		#endif
-		
+		// stop the ray once it passes the solid terrain on this pixel
+		IntersecTerrain = length(rayProgress - cameraPosition) > bliss_terrainDist;
+
 		/// avoid overdraw
 		if(notVisible || IntersecTerrain) break;
 
@@ -506,9 +529,13 @@ vec4 bliss_renderClouds(
 	// maxIT_clouds = 30;
 
 	vec3 dV_view = normalize(viewPos.xyz);
-	
+
 	// this is the cloud curvature.
 	dV_view.y += 0.025 * heightRelativeToClouds;
+
+	// expose ray verticality so the density field can fade the high-frequency
+	// fluff at grazing angles (anti-aliasing for the detail pass).
+	bliss_rayVerticality = abs(dV_view.y);
 
 	vec3 dV_view_Alto = dV_view;
 
@@ -744,6 +771,13 @@ vec4 GetVolumetricClouds(int cloudAltitude, float distanceThreshold, inout float
     //     are in scope at every GetClouds() call site in RV.
     WsunVec      = normalize(mat3(gbufferModelViewInverse) * sunVec);
     sunElevation = dot(sunVec, upVec);
+
+    // (1b) Terrain depth occlusion. RV passes lViewPosM = world distance to the
+    //      solid fragment on this pixel. On real sky pixels (skyFade >= 0.7,
+    //      RV's own threshold) force it to infinity so distant horizon clouds
+    //      are not culled; on terrain pixels keep it, so the cloud raymarch
+    //      stops at the terrain and clouds no longer draw through mountains.
+    bliss_terrainDist = (skyFade >= 0.7) ? 1e9 : lViewPosM;
 
     // (2) Bliss' renderClouds() internally multiplies by gbufferModelViewInverse,
     //     so it wants a VIEW-space frag direction. Rebuild one from RV's

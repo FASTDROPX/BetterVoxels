@@ -170,3 +170,91 @@ BALANCE / SAFETY CONFIRMATION (Iteration 4)
      gbuffers_water, dh_water)                                            : PASS
    - GLSL 1.30 safe (no global initializers reading uniforms added)       : PASS
 =======================================================================
+
+
+=======================================================================
+ DEBUG ITERATION 5 -- depth occlusion, fluff, world-anchor verification
+=======================================================================
+The Iteration 4 rewrite removed the spikes but exposed/!left three issues.
+Each is addressed below; all changes are inside bliss_clouds.glsl.
+
+(1) "CLOUDS FOLLOW THE CAMERA" -- diagnosed, root cause was NOT view-space
+-------------------------------------------------------------------------
+Checked the coordinate chain end to end:
+    bliss_layerStartingPosition():
+        position = dV_view*dither + cameraPos + (dV_view/abs(dV_view.y))*flip
+    renderLayer(): rayProgress starts there and does rayProgress += dV_view
+    GetCumulusDensity()/coverageField() sample pos.xz == rayProgress.xz
+cameraPos IS cameraPosition (absolute world), so the sampled position is
+absolute WORLD space already -- the noise is world-anchored, not camera
+space. Injecting cameraPosition again would DOUBLE it and actually break
+anchoring, so that was not done.
+
+The real reason it LOOKED locked: BLISS_COVER_SCALE was 0.00045, i.e. cloud
+features ~2200 blocks wide. Moving/looking shifts the sampled noise by a
+tiny fraction of a feature, so the near-uniform field appears static. Fix:
+   - BLISS_COVER_SCALE 0.00045 -> 0.0010  (~1000-block masses: real shape,
+     visible motion parallax as the player moves)
+   - BLISS_ANISO       0.55    -> 0.70    (rounder masses, less "tube")
+   - plus the fluff pass in (3), whose fine detail makes the world-anchored
+     parallax obvious.
+
+(2) CLOUDS DRAWING THROUGH TERRAIN / MOUNTAINS -- real bug, now fixed
+--------------------------------------------------------------------
+Bliss' terrain-intersection test was compiled out (CLOUDS_INTERSECT_TERRAIN
+undefined) AND it derived its cutoff from length(FragPosition), which in
+this port is a normalized direction * 1024 (a constant ~1024) -- useless.
+So nothing stopped the raymarch at solid geometry and clouds painted over
+distant mountains.
+
+RV already provides the right value: lViewPosM = world distance to the
+solid fragment on this pixel (it is a parameter of GetVolumetricClouds and
+is how RV's own Reimagined/Unbound clouds occlude -- see reimaginedClouds
+lines "if (lTracePos > lViewPosM)"). Wiring:
+   - new runtime global  float bliss_terrainDist;
+   - adapter sets it:  bliss_terrainDist = (skyFade >= 0.7) ? 1e9 : lViewPosM;
+       * skyFade >= 0.7 is RV's own "this pixel is sky" threshold -> 1e9 so
+         distant horizon clouds are NOT culled.
+       * otherwise it is the real terrain distance.
+   - renderLayer (both the cumulus loop and the altostratus branch) now does
+         IntersecTerrain = length(rayProgress - cameraPosition) > bliss_terrainDist;
+     and breaks/returns when true. The old #ifdef CLOUDS_INTERSECT_TERRAIN
+     blocks and the bogus length(FragPosition) cutoff were deleted.
+Result: on terrain pixels the ray stops at the terrain depth, so clouds no
+longer render over or through blocks/mountains; on sky pixels they render
+to the horizon as before.
+
+(3) "SMOOTH PLASTIC" -- added a high-frequency fluff pass (anti-aliased)
+-----------------------------------------------------------------------
+The 165-block erosion alone left smooth, synthetic surfaces. Added a second
+detail pass in bliss_GetCumulusDensity (LoD>=1 only):
+    fp     = pos * BLISS_FLUFF_SCALE; fp.xz *= 0.6;          // ~22-76 block detail
+    fluff  = bliss_vnoise3(fp)*0.65 + bliss_vnoise3(fp*2 + 7.3)*0.35; // 2 octaves
+    cloud *= 1 - bliss_quintic(fluff) * BLISS_FLUFF_AMOUNT * fluffFade * (1 - cloud);
+Two things keep this from bringing the spikes back:
+   - it is MULTIPLICATIVE and weighted by (1-cloud), so it only nibbles
+     EDGES (cores stay solid) and can never go negative; and
+   - fluffFade = quintic(clamp((bliss_rayVerticality - 0.30)/0.40, 0, 1)).
+     bliss_rayVerticality = abs(view ray .y) is set in renderClouds. The
+     fluff is therefore full strength only when looking up (small, densely
+     sampled ray steps) and fades to ZERO toward the horizon (huge steps),
+     which is precisely where fine detail used to alias into spikes. Fine
+     detail is added exactly where the ray can resolve it.
+
+NEW / CHANGED TUNABLES
+   BLISS_COVER_SCALE  0.00045 -> 0.0010   bigger-but-shaped masses + parallax
+   BLISS_ANISO        0.55    -> 0.70      rounder, less tube-like
+   BLISS_FLUFF_SCALE  (new) 0.022          micro-detail size
+   BLISS_FLUFF_AMOUNT (new) 0.55           fluff bite depth
+   runtime globals: bliss_terrainDist, bliss_rayVerticality
+
+BALANCE / SAFETY CONFIRMATION (Iteration 5)
+   - {} () [] balance == 0 on bliss_clouds.glsl                          : PASS
+   - #if / #ifdef / #ifndef (30) == #endif (30)                         : PASS
+   - no orphan CLOUDS_INTERSECT_TERRAIN / local lViewPosM references     : PASS
+   - terrain test active in both cumulus loop and altostratus branch     : PASS
+   - no step()/smoothstep() controlling density (explicit quintic only)  : PASS
+   - noise sampled in absolute WORLD space (rayProgress incl cameraPosition): PASS
+   - fluff gated by LoD>=1 and faded by ray verticality (no horizon alias): PASS
+   - GLSL 1.30 safe; globals use constant initialisers                   : PASS
+=======================================================================
