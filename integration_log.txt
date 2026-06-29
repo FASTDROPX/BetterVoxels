@@ -253,3 +253,84 @@ OFFLINE VALIDATION (iteration 2)
      compute pass + gbuffers_water + dh_water): PASS
    - GLSL 1.30 safe (no global initializers reading uniforms added): PASS
 =======================================================================
+
+
+=======================================================================
+ DEBUG ITERATION 3 -- GEOMETRIC SHAPING (flat scattered pancakes)
+=======================================================================
+TARGET (reference 2026-06-29_16.41.00.jpg)
+------------------------------------------
+Flat, elongated "pancake" clouds with soft edges and VAST patches of open
+sky -- NOT a continuous full-sky sheet. Iteration 2 fixed the noise so the
+clouds were soft and non-tiling, but coverage was near-uniform: the field
+sat at ~0.3 almost everywhere, reading as one soft "monolithic choke"
+overhead with no open-sky gaps.
+
+WHY THE CHOKE HAPPENED (math)
+-----------------------------
+For layer 0 the coverage is
+    coverage = abs(CloudLarge*2 - 1.2)*0.5 - (1 - CloudSmall)
+    layer0   = coverage + LAYER0_COVERAGE   (then height clamps & erosion)
+With CloudLarge ~ CloudSmall ~ 0.5 (their mean), this evaluates to
+    abs(-0.2)*0.5 - 0.5 + 0.7  =  0.1 - 0.5 + 0.7  =  ~0.3
+EVERYWHERE. A spatially-constant ~0.3 is exactly a full-sky haze. There was
+no large-scale term to decide WHERE clouds may exist vs. open sky.
+
+CHANGE 1 -- LARGE-SCALE COVERAGE MASK (the "where", new)
+--------------------------------------------------------
+Added one big, smooth field in bliss_cloudCov(), evaluated per column from
+world XZ:
+    covMask = bliss_fbm2( pos.xz * vec2(BLISS_ANISO,1.0) / BLISS_COVER_MASK_SCALE );
+    covMask = smoothstep(0.15, 0.85, covMask);          // soft shoulders
+    openSky = (1.0 - covMask) * BLISS_OPENSKY;           // 0 in a field, ~0.55 in a gap
+openSky is then subtracted as a spatially-varying THRESHOLD from every
+layer-0 / layer-1 coverage sum (4 sites: the two main layers + the two
+fog-path layers):
+    ... coverage + LAYER0_COVERAGE            - openSky ...
+    ... coverage + LAYER1_COVERAGE - 0.5      - openSky ...
+Effect: where covMask~1 the original Bliss coverage is untouched (clouds
+form normally); where covMask~0 the threshold drops the field below zero
+and max(...,0) clears it to open sky. The constant ~0.3 haze is replaced by
+broad cloud-fields separated by broad open-sky gaps -- the monolithic choke
+is gone. Because the mask is fbm (hash-based) it never tiles, and because
+it is applied inside cloudCov it is shared by the lighting AND self-shadow
+sample paths, so shadows stay consistent with the visible cloud shapes.
+
+CHANGE 2 -- HORIZONTAL-TO-VERTICAL STRETCHING (the "shape")
+-----------------------------------------------------------
+  * Horizontal elongation: BLISS_ANISO = 0.55 multiplies the X axis of the
+    coverage-mask coordinate, so the cloud-fields/gaps are ~1.8x longer in
+    X than Z -> elongated pancake bands instead of round blobs.
+  * Vertical flatten: the 3D erosion sample is squashed in Y. The Bliss
+    constant (pos.y * 1/48) is now pos.y * 1/BLISS_VFLATTEN with
+    BLISS_VFLATTEN = 64 (was 48): the erosion varies even more slowly with
+    height, so cloud tops/bottoms read as flat sheets rather than vertical
+    billows. Combined with the unchanged 100-block-thick, well-separated
+    layers (250 / 500 / 2000) this gives thin, flat decks.
+
+CHANGE 3 -- INTERPOLATION CURVES (remove thorns/spikes)
+-------------------------------------------------------
+All value-noise interpolation already uses the QUINTIC Hermite smoothstep
+    f = f*f*f*(f*(f*6 - 15) + 10)
+on every axis of bliss_vnoise2 / bliss_vnoise3 (introduced in iter. 2,
+replacing the original linear "mix(xy.r, xy.g, f.y)" texture trick that
+produced the pixelated steps). Iteration 3 additionally wraps the new
+coverage mask in smoothstep(0.15, 0.85, ...) so the field-to-gap
+transition has smooth shoulders with zero hard/aliased edges. No linear
+interpolation remains in any cloud-shape path; the only mix() calls left
+are RGB colour blends in renderClouds (not geometry).
+
+NEW TUNABLES (top of the noise-bridge block in bliss_clouds.glsl)
+   BLISS_COVER_MASK_SCALE 1800.0  -- larger = bigger cloud patches & gaps
+   BLISS_OPENSKY          0.55    -- higher = more open sky
+   BLISS_ANISO            0.55    -- lower  = more elongated bands (1.0 = round)
+   BLISS_VFLATTEN         64.0    -- higher = flatter pancakes (Bliss original = 48)
+
+BRACE / PREPROCESSOR BALANCE CONFIRMATION (iteration 3)
+   - {} braces balance == 0 on bliss_clouds.glsl: PASS
+   - () parens  balance == 0 on bliss_clouds.glsl: PASS
+   - [] brackets balance == 0 on bliss_clouds.glsl: PASS
+   - #if / #ifdef / #ifndef (36) == #endif (36): PASS
+   - openSky: 1 definition + 4 threshold subtractions, all in scope: PASS
+   - no new #define / symbol collisions across the RV tree: PASS
+=======================================================================

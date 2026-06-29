@@ -107,6 +107,16 @@ float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_S
 // supplied by the 3D erosion noise, not by stacking 2D octaves.
 #define BLISS_FBM_OCTAVES 2
 
+// --- Iteration 3: geometric shaping (flat scattered pancakes, open sky) ---
+// A LARGE-scale coverage mask gates where clouds may form, so the sky
+// breaks into broad cloud-fields separated by broad open-sky gaps instead
+// of one continuous full-sky sheet ("monolithic choke"). Anisotropy then
+// stretches those fields horizontally into elongated pancake bands.
+#define BLISS_COVER_MASK_SCALE 1800.0 // world size of a cloud-field / gap (bigger = larger patches)
+#define BLISS_OPENSKY 0.55            // 0..1, how aggressively the gaps clear the sky
+#define BLISS_ANISO 0.55              // <1 elongates cloud fields horizontally (1.0 = round)
+#define BLISS_VFLATTEN 64.0           // vertical squash of the 3D erosion noise (Bliss = 48; higher = flatter pancakes)
+
 // Dave Hoskins style hashes (high quality, no visible lattice patterning).
 float bliss_hash12(vec2 p){
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -241,10 +251,19 @@ float bliss_cloudCov(int layer, in vec3 pos, vec3 samplePos, float minHeight, fl
 
 	float CloudLarge = bliss_noiseB(SampleCoords0);
 
+	// Large-scale coverage mask (Iteration 3). Smoothly (quintic fbm +
+	// smoothstep shoulders) splits the sky into broad cloud-fields and
+	// open-sky gaps, horizontally elongated by BLISS_ANISO. openSky is a
+	// spatially-varying density THRESHOLD subtracted from each layer's
+	// coverage below: ~0 inside a cloud-field, ~BLISS_OPENSKY in a gap.
+	float covMask = bliss_fbm2(pos.xz * vec2(BLISS_ANISO, 1.0) / BLISS_COVER_MASK_SCALE);
+	covMask = smoothstep(0.15, 0.85, covMask);
+	float openSky = (1.0 - covMask) * BLISS_OPENSKY;
+
 	if(layer == 0){
 		coverage = abs(CloudLarge*2.0 - 1.2)*0.5 - (1.0-CloudSmall);
 
-		float layer0 = min(min(coverage + LAYER0_COVERAGE, clamp(LAYER0_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER0_minHEIGHT_FOG - pos.y,0,1));
+		float layer0 = min(min(coverage + LAYER0_COVERAGE - openSky, clamp(LAYER0_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER0_minHEIGHT_FOG - pos.y,0,1));
 
 		Topshape = max(pos.y - (LAYER0_maxHEIGHT_FOG - 75),0.0) / 200.0;
 		Topshape += max(pos.y - (LAYER0_maxHEIGHT_FOG - 10),0.0) / 15.0;
@@ -257,7 +276,7 @@ float bliss_cloudCov(int layer, in vec3 pos, vec3 samplePos, float minHeight, fl
 		
 		coverage = abs(CloudLarge-0.8) - CloudSmall;
 
-		float layer1 = min(min(coverage + LAYER1_COVERAGE - 0.5,clamp(LAYER1_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER1_minHEIGHT_FOG - pos.y,0,1));
+		float layer1 = min(min(coverage + LAYER1_COVERAGE - 0.5 - openSky,clamp(LAYER1_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER1_minHEIGHT_FOG - pos.y,0,1));
 
 		Topshape = max(pos.y - (LAYER1_maxHEIGHT_FOG - 75),0.0) / 200.0;
 		Topshape += max(pos.y - (LAYER1_maxHEIGHT_FOG - 10), 0.0) / 15.0;
@@ -271,7 +290,7 @@ float bliss_cloudCov(int layer, in vec3 pos, vec3 samplePos, float minHeight, fl
 	
 		#ifdef CloudLayer0 
 			float layer0_coverage =  abs(CloudLarge*2.0 - 1.2)*0.5 - (1.0-CloudSmall);
-			float layer0 = min(min(layer0_coverage + LAYER0_COVERAGE, clamp(LAYER0_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER0_minHEIGHT_FOG - pos.y,0,1));
+			float layer0 = min(min(layer0_coverage + LAYER0_COVERAGE - openSky, clamp(LAYER0_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER0_minHEIGHT_FOG - pos.y,0,1));
 
 			Topshape = max(pos.y - (LAYER0_maxHEIGHT_FOG - 75),0.0) / 200.0;
 			Topshape += max(pos.y - (LAYER0_maxHEIGHT_FOG - 10),0.0) / 15.0;
@@ -282,7 +301,7 @@ float bliss_cloudCov(int layer, in vec3 pos, vec3 samplePos, float minHeight, fl
 		
 		#ifdef CloudLayer1
 			float layer1_coverage = abs(CloudLarge-0.8) - CloudSmall;
-			float layer1 = min(min(layer1_coverage + LAYER1_COVERAGE - 0.5,clamp(LAYER1_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER1_minHEIGHT_FOG - pos.y,0,1));
+			float layer1 = min(min(layer1_coverage + LAYER1_COVERAGE - 0.5 - openSky,clamp(LAYER1_maxHEIGHT_FOG - pos.y,0,1)), 1.0 - clamp(LAYER1_minHEIGHT_FOG - pos.y,0,1));
 
 			Topshape = max(pos.y - (LAYER1_maxHEIGHT_FOG - 75), 0.0) / 200;
 			Topshape += max(pos.y - (LAYER1_maxHEIGHT_FOG - 10 ), 0.0) / 50;
@@ -327,7 +346,7 @@ float bliss_cloudVol(int layer, in vec3 pos, in vec3 samplePos, in float cov, in
 
 float bliss_GetCumulusDensity(int layer, in vec3 pos, in int LoD, float minHeight, float maxHeight){
 
-	vec3 samplePos =  pos*vec3(1.0,1./48.,1.0)/4;
+	vec3 samplePos =  pos*vec3(1.0, 1.0/BLISS_VFLATTEN, 1.0)/4;
 	
 	float coverageSP = bliss_cloudCov(layer, pos,samplePos, minHeight, maxHeight);
 
