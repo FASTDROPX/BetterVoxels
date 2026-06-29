@@ -111,6 +111,21 @@ float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_S
 #define BLISS_AA_LO 0.12
 #define BLISS_AA_HI 0.50
 
+// --- Iteration 7: volumetric LIGHTING tunables (shape constants untouched) ---
+// Bliss' lighting math is correct, but it was authored for Bliss' physical sky
+// LUT. Fed RV's cloudLightColor/cloudAmbientColor through Bliss' x3.14 / x2
+// scatter gains, the HDR values overshoot massively (the forward Mie peak is
+// ~25-50x the light colour near the sun) so everything clips to flat white in
+// RV's tonemap. These bring the cloud radiance back into a sane HDR range and
+// add explicit Beer-Lambert depth shading so structure survives.
+#define BLISS_SUN_SCATTER   1.00    // forward sun-scatter gain (was 3.14 -> anti-blowout)
+#define BLISS_MULTI_SCATTER 0.80    // broad multi-scatter gain (was 3.14)
+#define BLISS_MIE_CLAMP     5.0     // cap on the forward phase peak (tames the sun halo)
+#define BLISS_SELFSHADOW    11.0    // Beer-Lambert absorption for self-shadowing (higher = darker cores)
+#define BLISS_BASE_DARK     0.55    // how much cloud BASES darken with depth (0..1)
+#define BLISS_CORE_DARK     0.45    // how much dense CORES darken (0..1)
+#define BLISS_SHADOW_TINT   vec3(0.60, 0.68, 0.85)  // soft blue-grey colour pushed into shaded pockets
+
 // --- Runtime globals (set per-call by the adapter / renderer; NOT constants) ---
 // bliss_terrainDist:    world distance to solid terrain on this pixel's ray
 //                       (1e9 on sky pixels); the raymarch stops past it so
@@ -389,16 +404,25 @@ vec3 bliss_DoCloudLighting(
 	vec3 sunMultiScatter,
 	float distantfog
 ){
+	// powder (dark-edge) term + Beer-Lambert self-shadow toward the sun.
 	float powder = 1.0 - exp(-10.0 * density);
-	vec3 directLight = sunScatter * exp(-10.0 * sunShadows) + sunMultiScatter * exp(-3.0 * sunShadows) * powder;
+	vec3 directLight = sunScatter * exp(-BLISS_SELFSHADOW * sunShadows)
+	                 + sunMultiScatter * exp(-BLISS_SELFSHADOW * 0.27 * sunShadows) * powder;
 
 	vec3 indirectLight = skyLightCol * mix(1.0,  2.0 * (1.0 - sqrt((skyScatter*skyScatter*skyScatter)*density)) , pow(distantfog,1.0 - rainStrength*0.5));
-	
-	// return directLight;
-	// #ifndef TEST
-	// return indirectLight;
-	// #endif
-	return directLight + indirectLight;
+
+	// --- Iteration 7 depth shading -------------------------------------------
+	// Darken cloud BASES (skyScatter -> 1 low in the layer) and dense CORES with
+	// Beer-Lambert falloff, and bleed those shaded regions toward a soft
+	// blue-grey so the lower planes / shaded pockets separate from the bright,
+	// lit tops instead of stacking into one flat white mass.
+	float baseDark = 1.0 - BLISS_BASE_DARK * skyScatter;
+	float coreDark = 1.0 - BLISS_CORE_DARK * (1.0 - exp(-3.5 * density));
+	float depthShade = clamp(baseDark * coreDark, 0.0, 1.0);
+	vec3 shadowCol = skyLightCol * BLISS_SHADOW_TINT;
+
+	vec3 ambient = mix(shadowCol, indirectLight, depthShade);
+	return directLight * depthShade + ambient;
 }
 
 vec4 bliss_renderLayer(
@@ -614,10 +638,11 @@ vec4 bliss_renderClouds(
 	float SdotV = dot(WsunVec, normalize(mat3(gbufferModelViewInverse)*FragPosition + gbufferModelViewInverse[3].xyz));
 
 	float mieDay = bliss_phaseg(SdotV, 0.85) + bliss_phaseg(SdotV, 0.75);
+	mieDay = min(mieDay, BLISS_MIE_CLAMP);                 // anti-blowout: cap the forward sun halo
 	float mieDayMulti = (bliss_phaseg(SdotV, 0.35) + bliss_phaseg(-SdotV, 0.35) * 0.5) ;
 
-	vec3 directScattering = LightColor * mieDay * 3.14 ;
-	vec3 directMultiScattering = LightColor * mieDayMulti * 3.14 * 2.0;
+	vec3 directScattering = LightColor * mieDay * BLISS_SUN_SCATTER ;
+	vec3 directMultiScattering = LightColor * mieDayMulti * BLISS_MULTI_SCATTER * 2.0;
 	vec3 sunIndirectScattering = LightColor;// * bliss_phaseg(dot(mat3(gbufferModelView)*vec3(0,1,0),normalize(FragPosition)), 0.5) * 3.14;
 
 	// use this to blend into the atmosphere's ground.

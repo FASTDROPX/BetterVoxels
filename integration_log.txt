@@ -339,3 +339,83 @@ BALANCE / SAFETY CONFIRMATION (Iteration 6)
    - no step()/smoothstep(); explicit quintic only                       : PASS
    - GLSL 1.30 safe                                                      : PASS
 =======================================================================
+
+
+=======================================================================
+ DEBUG ITERATION 7 -- VOLUMETRIC TRANSMITTANCE AND SHADING FIX
+=======================================================================
+SYMPTOM
+-------
+Iteration 6 shape is correct, but every cloud reads as one flat,
+overexposed white mass: tops, bases, near and far layers all bleed
+together. No depth, no shadowed undersides, no layer separation.
+
+ROOT CAUSE (it was NOT the lighting math)
+-----------------------------------------
+bliss_DoCloudLighting + the renderLayer accumulation are verbatim native
+Bliss and ARE correct: powder = 1-exp(-10*density); the Beer-Lambert
+integration  COLOR += lighting*(1 - exp(-mult*muE)); EXTINCTION *=
+exp(-mult*muE)  is intact; self-shadow uses exp(-k*sunShadows). The
+problem is the INPUT RADIANCE. Bliss authored those gains for its physical
+sky LUT; this port feeds RV's cloudLightColor / cloudAmbientColor through
+Bliss' x3.14 (and x2) scatter gains. The forward Mie phase peaks at ~8-10,
+so directScattering near the sun is ~25-50x the light colour -- far above
+1.0. EVERYTHING clips to white in RV's tonemap, so the real shadow/depth
+gradient that the math produces is simply above the white point and
+invisible.
+
+FIX 1 -- ANTI-BLOWOUT (bring radiance into a sane HDR range)
+------------------------------------------------------------
+In bliss_renderClouds the scatter gains are now tunables, much lower than
+Bliss' physical-LUT values, and the forward phase peak is capped:
+    mieDay = min(mieDay, BLISS_MIE_CLAMP=5.0);     // tames the sun halo
+    directScattering      = LightColor*mieDay      * BLISS_SUN_SCATTER  (1.00, was 3.14)
+    directMultiScattering = LightColor*mieDayMulti * BLISS_MULTI_SCATTER*2 (0.80, was 3.14)
+The ambient (indirect) magnitude is left ALONE, so lit tops keep their
+brightness; only the blown-out direct sun term is tamed. Structure that
+was clipped to white now survives tonemapping.
+
+FIX 2 -- DENSITY-BASED DEPTH SHADING + BLUE-GREY SHADOWS
+-------------------------------------------------------
+Added to bliss_DoCloudLighting (after the native direct+indirect terms):
+    baseDark   = 1 - BLISS_BASE_DARK*skyScatter;                 // low in layer -> darker
+    coreDark   = 1 - BLISS_CORE_DARK*(1 - exp(-3.5*density));    // dense core -> darker (Beer-Lambert)
+    depthShade = clamp(baseDark*coreDark, 0, 1);
+    shadowCol  = skyLightCol * BLISS_SHADOW_TINT;                // soft blue-grey (0.60,0.68,0.85)
+    ambient    = mix(shadowCol, indirectLight, depthShade);
+    return directLight*depthShade + ambient;
+skyScatter is Bliss' existing bottom->top gradient (clamp((maxHeight-y)/100)),
+so this darkens cloud BASES and dense CORES with exponential falloff and
+bleeds them toward blue-grey, while lit tops (skyScatter~0, depthShade~1)
+stay bright silver-white. That is the white-edge -> grey-blue-core
+transition the reference shows.
+
+FIX 3 -- STRONGER SELF-SHADOW FOR LAYER SEPARATION
+--------------------------------------------------
+The self-shadow absorption is now BLISS_SELFSHADOW=11 (direct) and
+*0.27 (~3, multiscatter, unchanged). Bliss' existing cross-layer shadow
+(layer1 -> layer0 directLight term) and skylightOcclusion (layer1 dims
+layer0's ambient) are untouched, so when an upper deck sits over a lower
+one the lower plane now visibly darkens toward blue-grey.
+
+PRESERVED (Iteration 6 advances, NOT touched)
+   - the billow abs() coverage, channel transforms and feature scales
+     (BLISS_NOISE_CORR / BLISS_NOISE_RES), densityAtPos, cloudCov, cloudVol;
+   - depth occlusion (bliss_terrainDist) and grazing-angle AA
+     (bliss_rayVerticality fade on the finest erosion octave);
+   - world-anchoring of the noise.
+Only the lighting/scatter/shading equations changed.
+
+LIGHTING TUNABLES (top of bliss_clouds.glsl)
+   BLISS_SUN_SCATTER 1.00  BLISS_MULTI_SCATTER 0.80  BLISS_MIE_CLAMP 5.0
+   BLISS_SELFSHADOW 11.0   BLISS_BASE_DARK 0.55      BLISS_CORE_DARK 0.45
+   BLISS_SHADOW_TINT (0.60,0.68,0.85)
+
+BALANCE / SAFETY CONFIRMATION (Iteration 7)
+   - {} () [] balance == 0 on bliss_clouds.glsl                          : PASS
+   - #if / #ifdef / #ifndef (32) == #endif (32)                         : PASS
+   - density / shape code (cloudCov, cloudVol, densityAtPos) byte-identical: PASS
+   - shape constants (BLISS_NOISE_*) unchanged                           : PASS
+   - Beer-Lambert accumulation + powder intact; only inputs/shading added : PASS
+   - GLSL 1.30 safe (vec3 macro, no new uniforms/globals)                : PASS
+=======================================================================
