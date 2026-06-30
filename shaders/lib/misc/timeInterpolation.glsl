@@ -96,18 +96,17 @@ float bliss_GetVisualTimeFract(){
 }
 
 // ---------------------------------------------------------------------
-//  VISUAL TIME  (Iteration 17: procedural frameTimeCounter exp-out easing)
+//  VISUAL TIME  (Iteration 18: bufferless -- state-free subset only)
 // ---------------------------------------------------------------------
-//  The Iteration 16 worldTimeSmooth / unsigned_WsunVecSmooth uniforms were NOT
-//  Iris built-ins (they read 0), so they are removed. The easing is now done by
-//  us: composite7 eases a visual day position D toward the native time each
-//  frame with ew = 1 - exp(-dt / TIME_TRANSITION_SPEED) where dt is a
-//  frameTimeCounter delta, rolling FORWARD only (the gap is the forward arc
-//  round the day). lib/common.glsl reads D and sets timeAngle = fract(D) and
-//  blissCloudTimeBase = D*24000. The one unavoidable per-frame value lives in a
-//  colortex15 texel (RAW float, no packer) because that is the only store the
-//  global time code can read in both the 130 and 430 passes -- a bare GLSL
-//  variable has no cross-frame memory, and an SSBO is 430-only / not included
-//  here. The exp-out helpers below remain as reference.
+//  colortex15 is confirmed cleared frame-to-frame in the running Iris, so all
+//  cross-frame storage is gone. A time JUMP cannot be SMOOTHED without per-frame
+//  memory (the shader at frame N cannot know the time differed at frame N-1
+//  without something having stored it), so the sky/sun timeAngle stays the
+//  native time and still snaps on /time set -- an information limit, not a bug.
+//  The only state-free effect kept is the cloud advection: lib/common.glsl
+//  drives blissCloudTimeBase from frameTimeCounter (a continuous real-time clock
+//  that never jumps), so the clouds keep sliding smoothly and do not snap or
+//  freeze on a time command. The exp-out helpers below are kept only as
+//  reference for if a working persistent buffer ever becomes available.
 
 #endif // BLISS_TIME_INTERP_GLSL

@@ -1195,3 +1195,65 @@ BALANCE / SAFETY CONFIRMATION (Iteration 17)
    - unseeded -> native fallback (cannot freeze); OFF == byte-identical       : PASS
    - Iteration 13 terrain shadows retained                                    : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 18 -- BUFFERLESS PURE PROCEDURAL TIME (STATE-FREE
+                        SUBSET) AND CONTINUOUS CLOUD ADVECTION
+=======================================================================
+The user confirmed colortex15 does not persist (engine clears it frame-to-
+frame), and required a 100% state-free approach: no samplers, no textures, no
+feedback storage.
+
+THE INFORMATION LIMIT (why the sky cannot be smoothed state-free)
+----------------------------------------------------------------
+Smoothing a time JUMP means easing from where the visual was BEFORE the jump
+to the new target. The shader at frame N only has frame-N uniforms; it cannot
+know the time was different at frame N-1 unless something stored that value.
+frameTimeCounter is a clock, not a memory -- it tells you "now", not "the prior
+visual angle" or "when the jump happened". Any memoryless function
+f(timeAngle, frameTimeCounter) is therefore either == native (no easing) or a
+fixed per-frame distortion (which would corrupt NORMAL play too); it cannot
+ease a discontinuity. The "pendulum" with nothing to accumulate into collapses
+to a near-instant snap. This is information-theoretic, not a tuning problem.
+=> The sky/sun timeAngle is left at the NATIVE time and still snaps on a jump.
+
+THE STATE-FREE SUBSET THAT IS REAL (clouds)
+-------------------------------------------
+Cloud ADVECTION does not need to track time-of-day; it only needs a smooth,
+non-jumping clock. So when ECLIPSE_TIME_ACTIVE is ON, common.glsl drives
+    blissCloudTimeBase = frameTimeCounter * 20.0
+(frameTimeCounter is continuous and never jumps; x20 matches the normal
+worldTime drift of 20 ticks/s, preserving the Cloud Speed sync). cloud_movement
+(bliss_clouds.glsl) and the terrain cloud-shadow advection (mainLighting.glsl)
+already read blissCloudTimeBase, so with the toggle on the clouds and their
+ground shadows keep sliding smoothly and DO NOT snap or freeze on /time set,
+bed-sleep or time plugins. (Trade-off: cloud drift is now decoupled from game
+time and wraps with frameTimeCounter ~hourly; both are cosmetically minor.)
+This is the only genuinely bufferless "warp" available.
+
+CLEANUP (per protocol): removed every cross-frame store --
+  * uniforms.glsl: the colortex15 sampler (gone),
+  * composite7.glsl: the colortex15 feedback write + RENDERTARGETS:3,15 (gone);
+    the pass writes only its single colour target, as in stock,
+  * common.glsl: the colortex15 texelFetch read (gone); the Iteration 15 24-bit
+    packers were already removed. pipelineSettings.glsl had no colortex15 config.
+No samplers / textures / feedback storage remain in the time system.
+
+GUI: the toggle stays in the Performance screen and now controls the cloud
+continuous-clock effect. The Time Transition Speed slider is retained but, with
+no stateful glide to drive, has no effect in bufferless mode -- documented
+honestly in the lang file and the inline comments rather than pretended to work.
+
+PRESERVED (per protocol): Iteration 13 synchronized terrain cloud shadows
+(advection + LAYER0/1 coverage scaling), now riding the continuous clock when
+on; all Iteration 6-13 cloud shape / radiance / weather / fog work.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 18)
+   - zero cross-frame storage: no colortex15 / SSBO / smooth-uniform            : PASS
+   - sky timeAngle == native when ON (honest: state-free cannot ease a jump)    : PASS
+   - clouds + terrain shadows ride frameTimeCounter*20 -> smooth, never snap    : PASS
+   - Cloud Speed sync preserved (x20 matches 20 ticks/s)                        : PASS
+   - composite7 back to single render target; OFF == byte-identical            : PASS
+   - Iteration 13 terrain shadows retained                                      : PASS
+=======================================================================
