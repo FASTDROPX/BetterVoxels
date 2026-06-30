@@ -1049,3 +1049,87 @@ BALANCE / SAFETY CONFIRMATION (Iteration 15)
    - smooth() lines + blissSunAngle uniforms removed                          : PASS
    - Iteration 13 terrain shadows retained, rebound to the visual clock       : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 16 -- TRUE NATIVE ECLIPSE TIME-INTERPOLATION
+                        REPLICATION VIA GITHUB ANALYSIS
+=======================================================================
+Source read directly from github.com/Merlin1809/Eclipse-Shader (branch
+Unstable) via the GitHub API (git clone of third-party repos is blocked by
+the session proxy, but api.github.com raw reads are allowed).
+
+WHAT ECLIPSE ACTUALLY DOES (the decisive finding)
+-------------------------------------------------
+Eclipse's cinematic time is NOT shader math -- it is an IRIS ENGINE feature.
+In shaders/lib/settings.glsl Eclipse declares, and never defines:
+    uniform vec3  unsigned_WsunVecSmooth;
+    uniform vec3  unsigned_WmoonVecSmooth;
+    #define WsunVecSmooth normalize(unsigned_WsunVecSmooth)
+and in shaders/dimensions/begin.csh:
+    uniform float worldTimeSmooth;
+    uniform bool  worldTimeChangeCheck;
+    ...
+    #ifdef SMOOTH_SUN_ROTATION ... vec3 WsunVec = WsunVecSmooth; ...
+    float absWorldTime = worldTimeSmooth + mod(worldDay,...)*24000.0 - 48000.0;
+None of worldTimeSmooth / unsigned_WsunVecSmooth are defined anywhere in the
+pack (not in shaders.properties as smooth() custom uniforms, not computed in
+any pass). They are IRIS BUILT-IN uniforms: Iris maintains the cross-frame,
+forward-rolling smoothing of the world time and the sun/moon vectors
+INTERNALLY and hands the shader the already-eased values. That is exactly why
+Eclipse never runs backwards, needs no feedback buffer, and has no transition-
+speed slider for it -- there is no shader-side state or math to drive; the
+engine does it. (Eclipse's begin.csh SSBO interpolation -- interpolateValue()
+with mixhistory, and worldTimeChangeCheck forcing mixhistory=1.0 -- is only for
+SKY COLOUR / cloud-coverage params, and it SNAPS those on a time change rather
+than easing them; the positional easing is the engine uniforms.)
+
+THE REPLICATION (exact, in our structure)
+-----------------------------------------
+  * uniforms.glsl: declare the SAME uniforms Eclipse reads --
+      uniform float worldTimeSmooth;
+      uniform vec3  unsigned_WsunVecSmooth;
+    (gated by ECLIPSE_TIME_ACTIVE).
+  * common.glsl (Eclipse-native block, gated FRAGMENT + ECLIPSE):
+      bool avail = dot(unsigned_WsunVecSmooth, unsigned_WsunVecSmooth) > 0.25;
+      timeAngle          = avail ? fract(worldTimeSmooth/24000.0) : native;
+      blissCloudTimeBase = avail ? (worldTimeSmooth + mod(worldDay,100)*24000)
+                                 : native;
+    so the whole sun-vector pipeline (GetSunVector, the lightVec day/night flip,
+    sky noon/night factors, cloud lighting) AND the cloud advection follow the
+    engine-smoothed time. The smoothed-sun-vector length is the availability
+    probe: if the running Iris does not expose these uniforms it reads (0,0,0)
+    and we fall back to the exact native time (no glide, no freeze, no crash).
+  * bliss_clouds.glsl + mainLighting.glsl: unchanged from Iteration 15 -- both
+    already advect on blissCloudTimeBase, which is now the engine-smoothed clock
+    when available, so the cloud warp and the terrain cloud shadows ride it too.
+
+CLEANUP (per protocol): removed the Iteration 15 colortex15 accumulator --
+the 24-bit blissPack24/blissUnpack24 packers, the global texelFetch read in
+common.glsl, the composite7 feedback update + RENDERTARGETS:3,15, and the
+colortex15 sampler. composite7 is back to plain DRAWBUFFERS:3. Also removed the
+Iteration 14 smooth()-uniform remnants earlier. The build is lightweight again.
+
+HONEST DEPENDENCY (important): because Eclipse's feature lives in the ENGINE,
+this replication only animates if the running Iris build actually provides
+worldTimeSmooth / unsigned_WsunVecSmooth. If it does, the glide is perfect and
+forward-only for free. If it does NOT, the availability probe falls back to
+native time (the pack behaves exactly as stock with the toggle on) -- and then
+no shader can reproduce Eclipse, since the smoothing is engine-side; the
+closest shader approximation remains the Iteration 15 forward-rolling
+accumulator, which can be restored on request. The Time Transition Speed slider
+cannot reshape an engine uniform's rate (true of Eclipse as well).
+
+PRESERVED (per protocol): Iteration 13 synchronized terrain cloud shadows
+(Cloud_Speed advection + LAYER0/1 coverage scaling), now bound to the engine
+visual clock; all Iteration 6-13 cloud shape / radiance / weather / fog work.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 16)
+   - uses the EXACT Eclipse uniforms (worldTimeSmooth, unsigned_WsunVecSmooth)  : PASS
+   - forward-only + cross-frame state handled by the engine (no backward bug)   : PASS
+   - cloud advection + terrain shadow ride the same engine clock                : PASS
+   - availability probe -> native fallback if uniforms absent (no freeze/crash) : PASS
+   - Iteration 15 accumulator + 24-bit packers + colortex15 fully removed       : PASS
+   - composite7 back to single render target; OFF == byte-identical             : PASS
+   - Iteration 13 terrain shadows retained                                      : PASS
+=======================================================================

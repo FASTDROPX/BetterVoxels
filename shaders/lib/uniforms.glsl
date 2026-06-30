@@ -80,9 +80,6 @@ uniform sampler2D colortex6;
 uniform sampler2D colortex7;
 uniform sampler2D colortex8;
 uniform sampler2D colortex9;
-#ifdef ECLIPSE_TIME_ACTIVE
-uniform sampler2D colortex15; // Eclipse visual-time accumulator texel (Iteration 15)
-#endif
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D depthtex2;
@@ -156,6 +153,16 @@ uniform float frameTimeSmooth;
 uniform float eyeBrightnessM;
 uniform float eyeBrightnessM2;
 uniform float rainFactor;
+#ifdef ECLIPSE_TIME_ACTIVE
+// Eclipse-native cinematic time (Iteration 16). These are the EXACT uniforms
+// the Eclipse Shader consumes (lib/settings.glsl): Iris itself maintains the
+// engine-side, forward-rolling smoothing of the world time and sun vector
+// across frames. We declare them; if the running Iris build provides them they
+// drive the glide, otherwise they read 0 and common.glsl falls back to real
+// time (length of the smoothed sun vector is the availability probe).
+uniform float worldTimeSmooth;          // engine-smoothed world time (ticks)
+uniform vec3  unsigned_WsunVecSmooth;   // engine-smoothed world sun vector (unnormalised)
+#endif
 uniform float inBasaltDeltas;
 uniform float inCrimsonForest;
 uniform float inNetherWastes;

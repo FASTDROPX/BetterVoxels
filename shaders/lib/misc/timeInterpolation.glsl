@@ -96,17 +96,18 @@ float bliss_GetVisualTimeFract(){
 }
 
 // ---------------------------------------------------------------------
-//  VISUAL TIME  (Iteration 15: forward-rolling accumulator, applied globally)
+//  VISUAL TIME  (Iteration 16: Eclipse-native, engine-smoothed)
 // ---------------------------------------------------------------------
-//  The cinematic easing lives at the celestial ROOT in lib/common.glsl: a
-//  persistent colortex15 texel stores the VISUAL day position D, eased toward
-//  the native time each frame in composite7 with the slider-driven curve
-//  ew = 1 - exp(-frameTime / TIME_TRANSITION_SPEED), rolled FORWARD only (the
-//  per-frame gap is the forward arc round the day, so jumps advance through
-//  midnight, never rewind). common.glsl then sets timeAngle = fract(D) and
-//  blissCloudTimeBase = D*24000, so the whole sky AND the cloud advection glide
-//  forward together. The exp-out helpers above remain as reference; the engine
-//  smooth()-uniform approach (Iteration 14) was removed because it could not be
-//  forced forward-only nor driven by the GUI slider.
+//  Analysis of the Eclipse Shader (github.com/Merlin1809/Eclipse-Shader,
+//  lib/settings.glsl + dimensions/begin.csh) showed its cinematic time is an
+//  IRIS ENGINE feature: it declares `uniform float worldTimeSmooth` and
+//  `uniform vec3 unsigned_WsunVecSmooth` and just reads them -- Iris maintains
+//  the forward-rolling cross-frame smoothing internally (that is why it never
+//  runs backwards and needs no shader state). lib/common.glsl now adopts the
+//  same source: timeAngle = fract(worldTimeSmooth/24000) and the cloud
+//  advection clock = worldTimeSmooth, with a fallback to native time if the
+//  running Iris does not expose those uniforms. The exp-out helpers below
+//  remain only as reference; the Iteration 14 smooth()-uniform and the
+//  Iteration 15 colortex accumulator were both removed.
 
 #endif // BLISS_TIME_INTERP_GLSL
