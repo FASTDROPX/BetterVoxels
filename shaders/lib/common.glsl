@@ -152,18 +152,24 @@
     #define CLOUD_CLOSED_AREA_CHECK
     #define CLOUD_ALT1 192 //[-96 -92 -88 -84 -80 -76 -72 -68 -64 -60 -56 -52 -48 -44 -40 -36 -32 -28 -24 -20 -16 -10 -8 -4 0 4 8 12 16 20 22 24 28 32 36 40 44 48 52 56 60 64 68 72 76 80 84 88 92 96 100 104 108 112 116 120 124 128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192 196 200 204 208 212 216 220 224 228 232 236 240 244 248 252 256 260 264 268 272 276 280 284 288 292 296 300 304 308 312 316 320 324 328 332 336 340 344 348 352 356 360 364 368 372 376 380 384 388 392 396 400 404 408 412 416 420 424 428 432 436 440 444 448 452 456 460 464 468 472 476 480 484 488 492 496 500 510 520 530 540 550 560 570 580 590 600 610 620 630 640 650 660 670 680 690 700 710 720 730 740 750 760 770 780 790 800]
     #define CLOUD_SPEED_MULT 100 //[0 5 7 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300 325 350 375 400 425 450 475 500 550 600 650 700 750 800 850 900]
-    // Iteration 10: cinematic time-transition easing duration, in SECONDS, for
-    // the Eclipse-style smooth time system (lib/misc/timeInterpolation.glsl).
-    // 0.0 = instant (off). See the module header for the activation hooks.
+    // Cinematic time-transition easing duration reference, in SECONDS. NOTE
+    // (Iteration 14): the actual easing is now done by an engine-maintained
+    // smooth() custom uniform (shaders.properties: blissSunAngleS/C), whose
+    // fade time is set there (default 1.2s to match this). This slider is kept
+    // as the documented target duration; edit the smooth() fade numbers in
+    // shaders.properties to retune it (a GUI slider cannot drive an engine
+    // uniform). 0.0 here is informational.
     #define TIME_TRANSITION_SPEED 1.2 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
-    // Master switch for the Eclipse-style cinematic smooth time (in the
-    // Performance screen, next to TIME_TRANSITION_SPEED). OFF by default (the
-    // pack is byte-identical when off). When ON, the spare colortex15 texel
-    // (maintained in composite7, on its DEFAULT format -- no custom colortexN
-    // format is declared, which is what crashed Iteration 11) eases the world
-    // sun vector toward the real time over TIME_TRANSITION_SPEED seconds, and
-    // the Bliss cloud lighting follows it (sun/cloud relight smoothly on
-    // /time set, sleeping, time plugins). Iteration 12: format-token crash fixed.
+    // Master switch for the Eclipse-style GLOBAL cinematic smooth time (in the
+    // Performance screen). OFF by default (the pack is byte-identical when off).
+    // When ON, the native celestial timeAngle (lib/common.glsl) is replaced by
+    // one reconstructed from the engine-smoothed sin/cos of the sun angle, so
+    // the ENTIRE sun-vector pipeline -- sky gradient, atmospheric scattering,
+    // terrain light direction and cloud lighting -- glides smoothly on /time
+    // set, bed-sleep or time plugins instead of snapping. (The Iris-rendered
+    // shadow map and the vanilla sun/moon/star sprites are positioned by the
+    // engine from real time and still snap; those are engine-side.) Iteration
+    // 14: moved off the colortex feedback onto a robust smooth() uniform.
     //#define ECLIPSE_TIME_ACTIVE
     #define CLOUD_R 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
     #define CLOUD_G 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
@@ -729,7 +735,7 @@
     #include "/lib/uniforms.glsl"
 
     #if SHADOW_QUALITY == -1
-      float timeAngle = worldTime / 24000.0;
+      float blissNativeTimeAngle = worldTime / 24000.0;
     #else
       float tAmin     = fract(sunAngle - 0.033333333);
       float tAlin     = tAmin < 0.433333333 ? tAmin * 1.15384615385 : tAmin * 0.882352941176 + 0.117647058824;
@@ -737,7 +743,42 @@
       float tAfrc     = fract(tAlin * 2.0);
       float tAfrs     = tAfrc*tAfrc*(3.0-2.0*tAfrc);
       float tAmix     = hA < 0.5 ? 0.3 : -0.1;
-      float timeAngle = (tAfrc * (1.0-tAmix) + tAfrs * tAmix + hA) * 0.5;
+      float blissNativeTimeAngle = (tAfrc * (1.0-tAmix) + tAfrs * tAmix + hA) * 0.5;
+    #endif
+
+    // ---- Eclipse GLOBAL cinematic time (Iteration 14) --------------------
+    // When ECLIPSE_TIME_ACTIVE, replace the native celestial time with an
+    // ENGINE-SMOOTHED one so the ENTIRE sky/sun-vector pipeline glides on a
+    // time jump instead of snapping. blissSunAngleS/C are smooth() custom
+    // uniforms (shaders.properties) holding the exponentially-eased sin/cos of
+    // the celestial angle, maintained by Iris across frames -- no fragile
+    // feedback buffer, no read/write loop. Reconstruct the eased angle (atan2
+    // avoids the 0/1 wrap and always glides the short way) and run RV's own
+    // sunAngle->timeAngle remap on it, so in steady state it equals the native
+    // timeAngle and on a /time set or bed-sleep it eases over the smooth() fade
+    // time. Because every pass derives its sun/light vector, sky gradient and
+    // noon/night factors from THIS one variable via GetSunVector(), the whole
+    // environment glides from a single override. (The Iris-rendered shadow map
+    // and the vanilla sun/moon/star sprites are positioned by the engine from
+    // real time and cannot be eased here.) timeAngle is declared exactly once
+    // here -- common.glsl runs at global scope, where a bare reassignment is
+    // illegal, so the choice is made in the initializer.
+    #ifdef ECLIPSE_TIME_ACTIVE
+      // Safety: if the smooth() uniforms are unavailable (some setups) the
+      // (sin,cos) pair reads ~0; fall back to native time so the sky can never
+      // freeze -- it just stops easing.
+      float eclMag = blissSunAngleS * blissSunAngleS + blissSunAngleC * blissSunAngleC;
+      float eclSunAngle = fract(atan(blissSunAngleS, blissSunAngleC) * 0.15915494309189535); // /(2*pi)
+      float eTAmin = fract(eclSunAngle - 0.033333333);
+      float eTAlin = eTAmin < 0.433333333 ? eTAmin * 1.15384615385 : eTAmin * 0.882352941176 + 0.117647058824;
+      float eHA    = eTAlin > 0.5 ? 1.0 : 0.0;
+      float eTAfrc = fract(eTAlin * 2.0);
+      float eTAfrs = eTAfrc * eTAfrc * (3.0 - 2.0 * eTAfrc);
+      float eTAmix = eHA < 0.5 ? 0.3 : -0.1;
+      float eclEasedTimeAngle = (eTAfrc * (1.0 - eTAmix) + eTAfrs * eTAmix + eHA) * 0.5;
+      float timeAngle = (eclMag > 0.01) ? eclEasedTimeAngle : blissNativeTimeAngle;
+    #else
+      float timeAngle = blissNativeTimeAngle;
     #endif
 
     #include "/lib/util/commonFunctions.glsl"

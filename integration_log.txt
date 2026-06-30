@@ -891,3 +891,85 @@ BALANCE / SAFETY CONFIRMATION (Iteration 13)
    - mod(worldDay,100) form already compiles in common.glsl (GLSL 130)       : PASS
    - OFF path still byte-identical (all Eclipse changes gated)               : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 14 -- GLOBAL CELESTIAL TIME-ANGLE INTERCEPTION AND
+                        SKY PIPELINE INTEGRATION
+=======================================================================
+Report: with ECLIPSE_TIME_ACTIVE on, time still snapped instantly; the
+self-contained colortex15 sun-vector easing never animated (suspected
+buffer clear / read-write feedback lock), and even if it had, it only fed
+the cloud light direction while the sky/sun/atmosphere kept snapping.
+
+ROOT-CAUSE REFRAME
+------------------
+A fragment shader cannot remember last frame's value on its own; smoothing a
+time JUMP needs per-frame state. Iteration 11-13 used a colortex feedback
+texel for that state, which proved fragile here (no visible animation). But
+this pack ALREADY carries a robust, engine-maintained state primitive: Iris/
+OptiFine  smooth()  custom uniforms (shaders.properties), used throughout for
+rain/biome/eye fades. smooth() keeps an exponentially-eased value across
+frames on the CPU side -- exactly the "active running clock" needed, with no
+buffer, no clear, no read/write loop. Iteration 14 abandons the colortex
+approach for this, and moves the easing from the cloud adapter to the global
+celestial root.
+
+THE OVERHAUL
+------------
+1) STATE via smooth() custom uniforms (shaders.properties):
+     uniform.float.blissSunAngleS = smooth(231, sin(sunAngle*2pi), 1.2, 1.2)
+     uniform.float.blissSunAngleC = smooth(232, cos(sunAngle*2pi), 1.2, 1.2)
+   Smoothing sin AND cos (not the raw angle) avoids the 0/1 wrap and makes a
+   jump glide the SHORT way round the circle. Fade time 1.2s ~ the Time
+   Transition Speed default. These are only consumed by GLSL when the toggle
+   is on, so the default pack is unaffected.
+
+2) GLOBAL interception at the timeAngle ROOT (lib/common.glsl):
+   Right where RV derives timeAngle (from worldTime or sunAngle), when
+   ECLIPSE_TIME_ACTIVE we instead reconstruct the eased angle from the smooth
+   uniforms -- atan2(S,C)/2pi -> eased sunAngle -> RV's own sunAngle->timeAngle
+   remap -- so in steady state it equals the native timeAngle and on a jump it
+   eases. timeAngle is declared exactly ONCE via initializer (common.glsl runs
+   at GLOBAL scope, where a bare reassignment is illegal). A magnitude guard
+   (eclMag > 0.01) falls back to native time if the smooth uniforms are ever
+   unavailable, so the sky can never freeze.
+   Because GetSunVector(), every pass's  lightVec  day/night flip, the sky
+   noonFactor/nightFactor and the cloud lighting ALL derive from this single
+   timeAngle, the WHOLE sun-driven environment now glides together from one
+   override -- sky gradient, atmospheric scattering, terrain light direction
+   and clouds.
+
+3) Cleanup: removed the colortex15 sampler (uniforms.glsl), its feedback pass
+   (composite7.glsl back to plain DRAWBUFFERS:3), the pipelineSettings note,
+   and the cloud adapter's bliss_GetVisualSunVec routing (the adapter now just
+   uses the already-eased global sunVec). timeInterpolation.glsl keeps the
+   easing math as reference only.
+
+HONEST LIMITATIONS (engine-side, cannot be eased from a shader)
+   - The Iris-rendered SHADOW MAP is built from the real sun each frame, so
+     ground shadows still snap; during a transition they briefly disagree with
+     the eased sky. (Easing them would require Iris to smooth the shadow
+     projection, which is outside shader control.)
+   - The vanilla sun/moon/star SPRITES are positioned by Minecraft's celestial
+     matrix (real time) in the skytextured pass, so those sprites still snap;
+     the sky COLOUR/scattering and lighting around them ease.
+   - The Time Transition Speed GUI slider cannot drive an engine smooth()
+     uniform; the duration is the fade time in shaders.properties (default
+     1.2s). The slider is kept as the documented target; edit the two fade
+     numbers to retune.
+
+PRESERVED (per protocol): Iteration 13 synchronized Bliss terrain cloud
+shadows (Cloud_Speed advection + LAYER0/1 coverage scaling) are untouched, as
+are all Iteration 6-13 cloud shape / radiance / weather / fog results.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 14)
+   - state is engine-maintained smooth() uniforms; no colortex feedback        : PASS
+   - sin/cos smoothing -> no 0/1 wrap glitch; jump glides short way            : PASS
+   - eased timeAngle == native in steady state (smooth settles to input)       : PASS
+   - timeAngle declared exactly ONCE via initializer (global-scope legal)      : PASS
+   - eclMag guard falls back to native time (sky can never freeze)             : PASS
+   - smooth() uniforms only consumed when toggle ON; OFF == native/byte-ident  : PASS
+   - no dangling colortex15 / bliss_GetVisualSunVec references remain          : PASS
+   - Iteration 13 terrain cloud shadows retained verbatim                      : PASS
+=======================================================================

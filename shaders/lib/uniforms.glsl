@@ -80,9 +80,6 @@ uniform sampler2D colortex6;
 uniform sampler2D colortex7;
 uniform sampler2D colortex8;
 uniform sampler2D colortex9;
-#ifdef ECLIPSE_TIME_ACTIVE
-uniform sampler2D colortex15; // Eclipse smoothed-sun feedback texel (Iteration 11)
-#endif
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D depthtex2;
@@ -156,6 +153,13 @@ uniform float frameTimeSmooth;
 uniform float eyeBrightnessM;
 uniform float eyeBrightnessM2;
 uniform float rainFactor;
+#ifdef ECLIPSE_TIME_ACTIVE
+// Eclipse global cinematic time (Iteration 14): engine-smoothed sin/cos of the
+// celestial angle (smooth() custom uniforms in shaders.properties). Maintained
+// by Iris across frames -- no fragile feedback buffer.
+uniform float blissSunAngleS;
+uniform float blissSunAngleC;
+#endif
 uniform float inBasaltDeltas;
 uniform float inCrimsonForest;
 uniform float inNetherWastes;

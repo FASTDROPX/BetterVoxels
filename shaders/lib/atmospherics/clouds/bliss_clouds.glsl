@@ -892,18 +892,12 @@ vec4 GetVolumetricClouds(int cloudAltitude, float distanceThreshold, inout float
     // (1) Map RV's view-space light basis into the world-space globals the
     //     ported Bliss code reads. sunVec / upVec / gbufferModelViewInverse
     //     are in scope at every GetClouds() call site in RV.
-#ifdef ECLIPSE_TIME_ACTIVE
-    // Cinematic time interpolation ON: light the clouds with the eased sun
-    // (colortex15 feedback). sunElevation is taken from the SAME smoothed
-    // vector so the day/night flip in bliss_renderClouds eases with it rather
-    // than snapping out of step. OFF path below is the untouched Iteration 10
-    // code, so the default pack stays byte-identical.
-    WsunVec      = bliss_GetVisualSunVec(normalize(mat3(gbufferModelViewInverse) * sunVec));
-    sunElevation = WsunVec.y;
-#else
+    //     Iteration 14: the Eclipse cinematic-time easing is now applied
+    //     GLOBALLY at the timeAngle root (lib/common.glsl), so sunVec already
+    //     carries the eased sun here -- no cloud-specific routing needed; the
+    //     clouds glide in lockstep with the rest of the sky for free.
     WsunVec      = normalize(mat3(gbufferModelViewInverse) * sunVec);
     sunElevation = dot(sunVec, upVec);
-#endif
 
     // (1b) Terrain depth occlusion. RV passes lViewPosM = world distance to the
     //      solid fragment on this pixel. On real sky pixels (skyFade >= 0.7,

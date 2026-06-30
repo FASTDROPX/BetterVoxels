@@ -63,55 +63,12 @@ void main() {
             // + 0.2 * normal + 0.2;
 
     }*/
-#ifdef ECLIPSE_TIME_ACTIVE
-    /* RENDERTARGETS:3,15 */
-#else
     /* DRAWBUFFERS:3 */
-#endif
     gl_FragData[0] = vec4(color, 1.0);
-
-#ifdef ECLIPSE_TIME_ACTIVE
-    // ---- Eclipse cinematic time interpolation: feedback update -----------
-    // colortex15 holds ONE persistent texel: the smoothed world-space sun,
-    // ENCODED to [0,1] (.rgb) with a "seeded" flag in .a so it survives the
-    // buffer's default format (this pack declares no custom colortexN format).
-    // Each frame we recompute the REAL sun (same math as GetSunVector,
-    // overworld branch). During normal play the stored sun tracks the real sun
-    // EXACTLY (no lag, no low-precision stepping); only when worldTime JUMPS
-    // (/time set, sleeping, plugins) -- i.e. the real sun is >~2 deg off the
-    // stored sun -- do we EASE across the gap with an exponential-out step of
-    // time-constant TIME_TRANSITION_SPEED seconds. frameTime is the real
-    // per-frame delta, so the easing is frame-rate independent.
-    vec4 sunState;
-    #ifdef OVERWORLD
-        const vec2 spr = vec2(cos(sunPathRotation * 0.01745329251994), -sin(sunPathRotation * 0.01745329251994));
-        float sang = fract(timeAngle - 0.25);
-        sang = (sang + (cos(sang * 3.14159265358979) * -0.5 + 0.5 - sang) / 3.0) * 6.28318530717959;
-        vec3 sunView = normalize((gbufferModelView * vec4(vec3(-sin(sang), cos(sang) * spr) * 2000.0, 1.0)).xyz);
-        vec3 realSun = normalize(mat3(gbufferModelViewInverse) * sunView);
-
-        vec4 prev = texelFetch(colortex15, ivec2(0), 0);
-        // Decode the previous smoothed sun, or seed with the real sun on the
-        // first frame / uninitialised texel (.a flag clear) so there is no pop.
-        vec3 storedSun = (prev.a > 0.5) ? normalize(prev.rgb * 2.0 - 1.0) : realSun;
-
-        // Iteration 13: CONTINUOUS exponential-out easing toward the real sun
-        // EVERY frame -- no jump-detect snap. During normal play the real sun
-        // barely moves so the eased sun tracks it with an invisible constant
-        // lag; when worldTime JUMPS (/time set, sleeping, plugins) the eased sun
-        // glides across the whole gap over ~TIME_TRANSITION_SPEED s instead of
-        // snapping. frameTime is the real per-frame delta, so the curve is
-        // frame-rate independent: ew = 1 - exp(-dt / TIME_TRANSITION_SPEED).
-        float ew = clamp(1.0 - exp(-frameTime / max(TIME_TRANSITION_SPEED, 0.0001)), 0.0, 1.0);
-        vec3 newSun = mix(storedSun, realSun, ew);
-        newSun = (dot(newSun, newSun) > 1e-6) ? normalize(newSun) : realSun;
-
-        sunState = vec4(newSun * 0.5 + 0.5, 1.0); // encode to [0,1] + seeded flag
-    #else
-        sunState = vec4(0.0);                     // non-overworld: mark unseeded
-    #endif
-    gl_FragData[1] = sunState;
-#endif
+    // Iteration 14: the Eclipse cinematic-time easing moved off the fragile
+    // colortex15 feedback texel and onto an engine-maintained smooth() custom
+    // uniform applied globally at the timeAngle root (lib/common.glsl), so this
+    // pass is back to its original single-target form in every configuration.
 }
 
 #endif

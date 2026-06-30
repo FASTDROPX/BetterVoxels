@@ -96,26 +96,15 @@ float bliss_GetVisualTimeFract(){
 }
 
 // ---------------------------------------------------------------------
-//  SMOOTHED SUN  (the active cinematic channel)
+//  SMOOTHED SUN  (Iteration 14: now applied globally, not here)
 // ---------------------------------------------------------------------
-//  Returns the world-space sun direction the sky/cloud lighting should use.
-//   - ECLIPSE_TIME_ACTIVE off: identity -> the real sun, byte-identical pack.
-//   - on: the CONTINUOUSLY-eased sun from colortex15, encoded to [0,1] (.rgb)
-//     with a seeded flag in .a (written by composite7's feedback pass). We
-//     always return the eased sun (Iteration 13: no snap-back-to-real gate) so
-//     the transition animation is fully active and visible -- during normal
-//     play it sits an invisible hair behind the real sun; during a time jump it
-//     is mid-glide. Unseeded / degenerate -> real sun, so it can never go dark.
-#ifdef ECLIPSE_TIME_ACTIVE
-	vec3 bliss_GetVisualSunVec(vec3 realSunVecWorld){
-		vec4 s = texelFetch(colortex15, ivec2(0), 0);
-		if (s.a < 0.5) return realSunVecWorld;                 // unseeded -> real
-		vec3 stored = s.rgb * 2.0 - 1.0;                        // decode [0,1] -> [-1,1]
-		if (!(dot(stored, stored) > 1e-6)) return realSunVecWorld; // degenerate -> real
-		return normalize(stored);                              // the eased sun
-	}
-#else
-	vec3 bliss_GetVisualSunVec(vec3 realSunVecWorld){ return realSunVecWorld; }
-#endif
+//  The cinematic easing is no longer a self-contained colortex feedback read.
+//  It is applied at the celestial ROOT in lib/common.glsl, where the native
+//  timeAngle is replaced by one reconstructed from the engine-smoothed
+//  blissSunAngleS/C custom uniforms. Every pass then derives its eased
+//  sun/light vector, sky gradient and noon/night factors from that single
+//  override via GetSunVector(), so the whole environment glides together.
+//  This header keeps the exact easing math above as documentation/reference;
+//  no per-consumer sun accessor is needed any more.
 
 #endif // BLISS_TIME_INTERP_GLSL
