@@ -63,12 +63,30 @@ void main() {
             // + 0.2 * normal + 0.2;
 
     }*/
+#ifdef ECLIPSE_TIME_ACTIVE
+    /* RENDERTARGETS:3,15 */
+#else
     /* DRAWBUFFERS:3 */
+#endif
     gl_FragData[0] = vec4(color, 1.0);
-    // Iteration 14: the Eclipse cinematic-time easing moved off the fragile
-    // colortex15 feedback texel and onto an engine-maintained smooth() custom
-    // uniform applied globally at the timeAngle root (lib/common.glsl), so this
-    // pass is back to its original single-target form in every configuration.
+
+#ifdef ECLIPSE_TIME_ACTIVE
+    // ---- Eclipse Visual Time Accumulator: forward-rolling update ---------
+    // colortex15 holds the VISUAL day position D (unwrapped over a 100-day
+    // supercycle), 24-bit packed in .rgb with a seeded flag in .a. Each frame
+    // ease D toward the native time with the SLIDER-driven exponential-out
+    // curve, rolling FORWARD only so a backward time jump (night -> morning)
+    // advances through midnight instead of rewinding. blissNativeTimeAngle is
+    // the real (un-eased) time from common.glsl; TIME_TRANSITION_SPEED is the
+    // GUI slider; frameTime is the real per-frame delta (frame-rate independent).
+    vec4 prevTimeState = texelFetch(colortex15, ivec2(0), 0);
+    float prevDay = (prevTimeState.a > 0.5) ? blissUnpack24(prevTimeState.rgb) * 100.0
+                                            : blissNativeTimeAngle;            // seed: no pop
+    float forwardGap = fract(blissNativeTimeAngle - fract(prevDay));           // forward arc [0,1)
+    float ew = clamp(1.0 - exp(-frameTime / max(TIME_TRANSITION_SPEED, 0.0001)), 0.0, 1.0);
+    float newDay = mod(prevDay + forwardGap * ew, 100.0);                      // roll forward, bound
+    gl_FragData[1] = vec4(blissPack24(newDay * 0.01), 1.0);                    // D/100 in [0,1)
+#endif
 }
 
 #endif

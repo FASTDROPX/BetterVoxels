@@ -96,15 +96,17 @@ float bliss_GetVisualTimeFract(){
 }
 
 // ---------------------------------------------------------------------
-//  SMOOTHED SUN  (Iteration 14: now applied globally, not here)
+//  VISUAL TIME  (Iteration 15: forward-rolling accumulator, applied globally)
 // ---------------------------------------------------------------------
-//  The cinematic easing is no longer a self-contained colortex feedback read.
-//  It is applied at the celestial ROOT in lib/common.glsl, where the native
-//  timeAngle is replaced by one reconstructed from the engine-smoothed
-//  blissSunAngleS/C custom uniforms. Every pass then derives its eased
-//  sun/light vector, sky gradient and noon/night factors from that single
-//  override via GetSunVector(), so the whole environment glides together.
-//  This header keeps the exact easing math above as documentation/reference;
-//  no per-consumer sun accessor is needed any more.
+//  The cinematic easing lives at the celestial ROOT in lib/common.glsl: a
+//  persistent colortex15 texel stores the VISUAL day position D, eased toward
+//  the native time each frame in composite7 with the slider-driven curve
+//  ew = 1 - exp(-frameTime / TIME_TRANSITION_SPEED), rolled FORWARD only (the
+//  per-frame gap is the forward arc round the day, so jumps advance through
+//  midnight, never rewind). common.glsl then sets timeAngle = fract(D) and
+//  blissCloudTimeBase = D*24000, so the whole sky AND the cloud advection glide
+//  forward together. The exp-out helpers above remain as reference; the engine
+//  smooth()-uniform approach (Iteration 14) was removed because it could not be
+//  forced forward-only nor driven by the GUI slider.
 
 #endif // BLISS_TIME_INTERP_GLSL

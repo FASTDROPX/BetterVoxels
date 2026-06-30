@@ -973,3 +973,79 @@ BALANCE / SAFETY CONFIRMATION (Iteration 14)
    - no dangling colortex15 / bliss_GetVisualSunVec references remain          : PASS
    - Iteration 13 terrain cloud shadows retained verbatim                      : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 15 -- FORWARD-ONLY SCALAR TIME INTERPOLATION AND
+                        CLOUD ADVECTION WARP
+=======================================================================
+The Iteration 14 engine smooth() sin/cos approach produced three bugs:
+(1) night->day jumps rolled BACKWARD (chord interpolation takes the short
+way, with no notion of "forward"); (2) clouds froze during the transition
+(advection still on real worldTime, which had already jumped); (3) the GUI
+slider did nothing (smooth() fade is fixed in shaders.properties).
+
+WHY ALL THREE NEED THE SAME FIX
+-------------------------------
+Forward-only easing of a wrapping angle, at a slider-set rate, with the same
+clock feeding cloud advection, is impossible with smooth(): smooth() has no
+direction and a fixed fade. It requires a STATEFUL accumulator with custom,
+forward-biased update logic. So Iteration 15 implements a Visual Time
+Accumulator in a persistent texel and does the easing in-shader.
+
+THE VISUAL TIME ACCUMULATOR
+---------------------------
+State: colortex15 holds the VISUAL day position D (unwrapped over a 100-day
+supercycle so cloud advection stays continuous), 24-bit PACKED across .rgb
+with a seeded flag in .a. Packing makes it exact on ANY default buffer format
+-- no colortexNFormat is declared (the RGBA32F form crashed in Iteration 11).
+
+Update (composite7, per frame): forward-roll D toward the native time --
+    forwardGap = fract(blissNativeTimeAngle - fract(D))   // forward arc [0,1)
+    ew         = 1 - exp(-frameTime / TIME_TRANSITION_SPEED)   // SLIDER-driven
+    D          = mod(D + forwardGap * ew, 100)
+forwardGap is always the forward arc round the day, so a night(0.75)->
+morning(0.04) jump advances 0.75 -> 1.0/0.0 -> 0.04 THROUGH midnight, never
+backward (Bug 1 fixed). ew uses the GUI slider, so Time Transition Speed works
+again (Bug 3 fixed).
+
+Read (common.glsl, global initializer, FRAGMENT + ECLIPSE only):
+    timeAngle          = fract(D)       -> GetSunVector, the lightVec day/night
+                          flip, sky noon/night factors and cloud lighting all
+                          glide forward (whole sky eases),
+    blissCloudTimeBase = D * 24000      -> the cloud ADVECTION clock.
+cloud_movement (bliss_clouds.glsl) and the terrain-shadow advection
+(mainLighting.glsl) now both use blissCloudTimeBase, so during a jump the
+clouds WARP and rush forward along their wind vectors in lockstep with the sky
+and ease into the new positions on the same curve (Bug 2 fixed). The global
+texelFetch compiles here exactly like noonFactor (a function-calling global
+initializer two lines below).
+
+CLEANUP: removed the failed smooth() lines (shaders.properties) and the
+blissSunAngleS/C uniforms (uniforms.glsl); re-added the gated colortex15
+sampler.
+
+OFF / byte-identical: every Eclipse path is gated by ECLIPSE_TIME_ACTIVE and
+the FRAGMENT stage; with the toggle off, timeAngle is native and
+blissCloudTimeBase is exactly the old (worldTime + mod(worldDay,100)*24000),
+so cloud_movement and the terrain shadow are unchanged.
+
+PRESERVED (per protocol): Iteration 13 synchronized terrain cloud shadows --
+their advection is now simply bound to the new visual forward-easing clock
+(blissCloudTimeBase) while keeping the Cloud_Speed/CLOUD_SPEED_MULT scaling
+and the LAYER0/1 coverage response.
+
+HONEST ENGINE-SIDE LIMITS (unchanged): the Iris shadow map and the vanilla
+sun/moon/star sprites are placed by the engine from real time and still snap.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 15)
+   - forward-only: gap = fract(native - fract(D)) always advances             : PASS
+   - slider drives the ease: ew = 1 - exp(-frameTime / TIME_TRANSITION_SPEED)  : PASS
+   - clouds advect on the same visual clock (blissCloudTimeBase)              : PASS
+   - state 24-bit packed -> format-independent (no RGBA32F crash)             : PASS
+   - global texelFetch mirrors the noonFactor global-initializer precedent    : PASS
+   - timeAngle / blissCloudTimeBase declared exactly once each                : PASS
+   - OFF + vertex stage keep native time -> byte-identical                    : PASS
+   - smooth() lines + blissSunAngle uniforms removed                          : PASS
+   - Iteration 13 terrain shadows retained, rebound to the visual clock       : PASS
+=======================================================================

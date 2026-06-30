@@ -356,7 +356,11 @@ void DoLighting(inout vec4 color, inout vec3 shadowMult, vec3 playerPos, vec3 vi
                     //      so raising coverage darkens the terrain globally and a
                     //      fully covered sky heavily shades the ground.
                     // Recomputed inline (bliss_clouds.glsl is not in this pass).
-                    float blissCloudMove = (worldTime + mod(worldDay, 100) * 24000.0) / 24.0
+                    // Iteration 15: uses blissCloudTimeBase (common.glsl) so the
+                    // ground shadows ride the SAME forward-rolling visual clock as
+                    // the clouds -- they warp forward together on a time jump. With
+                    // ECLIPSE off it is the old worldTime expression (unchanged).
+                    float blissCloudMove = blissCloudTimeBase / 24.0
                                          * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01);
                     float blissClearScale = mix(0.72, 1.0, rainStrength); // BLISS_CLEAR_COVERAGE
                     float L0_COVERAGE = mix(CloudLayer0_coverage, Rain_coverage, rainStrength) * blissClearScale;

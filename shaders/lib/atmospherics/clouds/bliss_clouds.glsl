@@ -96,15 +96,14 @@ float LAYER2_DENSITY = mix(dailyWeatherParams1.z,0.05,rainStrength);
 // the in-game menu. At the defaults (Cloud_Speed 1.0, CLOUD_SPEED_MULT 100) this
 // equals the previous fixed baseline.
 //
-// [ECLIPSE TIME HOOK] cloud_movement is a file-scope initializer, so it cannot
-// call bliss_GetVisualWorldTime() here (GLSL forbids user-function calls in
-// global initializers on some drivers). When the smooth-time feedback buffer is
-// active, move this expression into a function body and swap
-//   (worldTime + mod(worldDay,100)*24000.0)  ->  smoothed visual ticks, e.g.
-//   mod(bliss_GetVisualWorldTime(), 100.0*24000.0)
-// so the cloud drift eases through time jumps with the sun. Kept on real time
-// for now (non-breaking; preserves the Iteration 9 speed sync).
-float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01);
+// Iteration 15: the cloud advection clock is now blissCloudTimeBase, a global
+// from common.glsl. With ECLIPSE_TIME_ACTIVE off it is exactly the old
+// (worldTime + mod(worldDay,100)*24000.0), so this is byte-identical and the
+// Iteration 9 Cloud Speed sync is preserved. With it on, blissCloudTimeBase is
+// the forward-rolling VISUAL time, so on a time jump the clouds warp and rush
+// along their wind vectors in sync with the sky, easing into their new
+// positions on the same exponential-out curve as the sun (Bug 2 fix).
+float cloud_movement = blissCloudTimeBase / 24.0 * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01);
 
 // =====================================================================
 //  NOISE BRIDGE  (Bliss noisetex  ->  RV-safe procedural noise)
