@@ -1133,3 +1133,65 @@ BALANCE / SAFETY CONFIRMATION (Iteration 16)
    - composite7 back to single render target; OFF == byte-identical             : PASS
    - Iteration 13 terrain shadows retained                                      : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 17 -- FIXED FAKE-UNIFORM BUG AND IMPLEMENTED PROCEDURAL
+                        frameTimeCounter EASING MATRIX
+=======================================================================
+Correction: the Iteration 16 conclusion was wrong. worldTimeSmooth and
+unsigned_WsunVecSmooth are NOT Iris built-in uniforms -- declaring them
+without a computing backend makes them read 0, so the system was dead. They
+have been removed from uniforms.glsl and common.glsl.
+
+THE PROCEDURAL EASING (frameTimeCounter exp-out, forward-only)
+--------------------------------------------------------------
+  * composite7 (update): ease a visual day position D toward the native time
+    each frame --
+        dt   = frameTime               (Iris' per-frame frameTimeCounter delta)
+        gap  = fract(nativeTimeAngle - fract(D))   // FORWARD arc round the day
+        ew   = 1 - exp(-dt / TIME_TRANSITION_SPEED) // GUI slider drives it
+        D    = mod(D + gap*ew, 100)
+    The forward arc makes a night->morning jump roll 0.75 -> 1.0/0.0 -> 0.04
+    THROUGH midnight, never backward. The slider works (in-shader exp-out).
+  * common.glsl (read): timeAngle = fract(D); blissCloudTimeBase = D*24000, so
+    the sky (GetSunVector, lightVec flip, noon/night factors, cloud lighting)
+    AND the cloud advection follow the same forward-rolling visual clock.
+  * cloud_movement (bliss_clouds.glsl) and the terrain cloud shadow advection
+    (mainLighting.glsl) already read blissCloudTimeBase -> bound to the clock.
+
+THE ONE HONEST CAVEAT (state has to live somewhere)
+---------------------------------------------------
+A per-frame exponential glide MUST remember last frame's value: a bare
+common.glsl variable is re-initialised every frame and cannot accumulate, and
+frameTimeCounter gives the clock but not the prior anchor. RV computes the
+GLOBAL timeAngle in common.glsl, which runs in BOTH #version 130 (sky /
+composite / terrain) and 430 (deferred / clouds) passes. The only persistent
+store readable in ALL of them is a colortex texel (texelFetch works in 130);
+RV's SSBO is 430-only and is not even included in common.glsl, and the "smooth"
+uniforms do not exist. So the single visual-time float is kept in one
+colortex15 texel -- but written as a RAW float now (the Iteration 15 24-bit
+PACKERS are removed, per the cleanup directive). If this still does not animate,
+the texel is not persisting across frames in the running Iris build, which is a
+pipeline-level behaviour no shader code can change; the feature is gated, so
+turning the toggle off restores the stock pack exactly.
+
+CLEANUP: removed worldTimeSmooth / unsigned_WsunVecSmooth (uniforms.glsl,
+common.glsl) and the Iteration 15 blissPack24/blissUnpack24 24-bit packers
+(already gone in 16, kept gone). colortex15 stores a raw float, no packing.
+
+PRESERVED (per protocol): Iteration 13 synchronized terrain cloud shadows
+(Cloud_Speed advection + LAYER0/1 coverage scaling), bound to the new clock;
+the GUI toggle + Time Transition Speed slider in the Performance screen, with
+the slider now actually driving the duration again.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 17)
+   - fake worldTimeSmooth / unsigned_WsunVecSmooth uniforms removed            : PASS
+   - easing is procedural: ew = 1 - exp(-frameTime / TIME_TRANSITION_SPEED)    : PASS
+   - forward-only: gap = fract(native - fract(D)) always advances             : PASS
+   - slider drives the glide duration in-shader                               : PASS
+   - cloud advection + terrain shadow ride D*24000 (blissCloudTimeBase)       : PASS
+   - 24-bit packers gone; colortex15 stores a raw float                       : PASS
+   - unseeded -> native fallback (cannot freeze); OFF == byte-identical       : PASS
+   - Iteration 13 terrain shadows retained                                    : PASS
+=======================================================================

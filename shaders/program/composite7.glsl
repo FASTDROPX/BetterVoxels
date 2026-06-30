@@ -63,12 +63,34 @@ void main() {
             // + 0.2 * normal + 0.2;
 
     }*/
+#ifdef ECLIPSE_TIME_ACTIVE
+    /* RENDERTARGETS:3,15 */
+#else
     /* DRAWBUFFERS:3 */
+#endif
     gl_FragData[0] = vec4(color, 1.0);
-    // Iteration 16: the cinematic-time easing is now Eclipse-native (Iris
-    // engine-smoothed worldTimeSmooth / unsigned_WsunVecSmooth uniforms, read in
-    // lib/common.glsl), so there is no shader-side feedback texel to maintain --
-    // this pass is back to its original single render target.
+
+#ifdef ECLIPSE_TIME_ACTIVE
+    // ---- Eclipse procedural frameTimeCounter easing: update -------------
+    // colortex15 holds the visual day position D (unwrapped over a 100-day
+    // cycle) as a RAW float in .r, with a seeded flag in .a. Each frame, ease D
+    // toward the native time with the GUI-slider exp-out curve, rolling FORWARD
+    // ONLY: the per-frame gap is the forward arc round the day
+    // (fract(native - fract(D))), so a backward time jump (night -> morning)
+    // advances through midnight, never rewinds.
+    //   dt = frameTime  -- Iris hands us the per-frame frameTimeCounter delta
+    //                      directly (no need to store the large counter, which
+    //                      would lose precision in the texel),
+    //   ew = 1 - exp(-dt / TIME_TRANSITION_SPEED)   (the Time Transition Speed slider).
+    vec4 prevVis = texelFetch(colortex15, ivec2(0), 0);
+    bool seeded  = prevVis.a > 0.5;
+    float prevDay = seeded ? prevVis.r : blissNativeTimeAngle;   // seed: no pop
+    float dt = (frameTime > 0.0 && frameTime < 30.0) ? frameTime : 0.0; // pause/hitch guard
+    float forwardGap = fract(blissNativeTimeAngle - fract(prevDay)); // forward arc [0,1)
+    float ew = clamp(1.0 - exp(-dt / max(TIME_TRANSITION_SPEED, 0.0001)), 0.0, 1.0);
+    float newDay = mod(prevDay + forwardGap * ew, 100.0);        // roll forward, bound
+    gl_FragData[1] = vec4(newDay, 0.0, 0.0, 1.0);
+#endif
 }
 
 #endif

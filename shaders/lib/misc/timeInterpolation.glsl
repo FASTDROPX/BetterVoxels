@@ -96,18 +96,18 @@ float bliss_GetVisualTimeFract(){
 }
 
 // ---------------------------------------------------------------------
-//  VISUAL TIME  (Iteration 16: Eclipse-native, engine-smoothed)
+//  VISUAL TIME  (Iteration 17: procedural frameTimeCounter exp-out easing)
 // ---------------------------------------------------------------------
-//  Analysis of the Eclipse Shader (github.com/Merlin1809/Eclipse-Shader,
-//  lib/settings.glsl + dimensions/begin.csh) showed its cinematic time is an
-//  IRIS ENGINE feature: it declares `uniform float worldTimeSmooth` and
-//  `uniform vec3 unsigned_WsunVecSmooth` and just reads them -- Iris maintains
-//  the forward-rolling cross-frame smoothing internally (that is why it never
-//  runs backwards and needs no shader state). lib/common.glsl now adopts the
-//  same source: timeAngle = fract(worldTimeSmooth/24000) and the cloud
-//  advection clock = worldTimeSmooth, with a fallback to native time if the
-//  running Iris does not expose those uniforms. The exp-out helpers below
-//  remain only as reference; the Iteration 14 smooth()-uniform and the
-//  Iteration 15 colortex accumulator were both removed.
+//  The Iteration 16 worldTimeSmooth / unsigned_WsunVecSmooth uniforms were NOT
+//  Iris built-ins (they read 0), so they are removed. The easing is now done by
+//  us: composite7 eases a visual day position D toward the native time each
+//  frame with ew = 1 - exp(-dt / TIME_TRANSITION_SPEED) where dt is a
+//  frameTimeCounter delta, rolling FORWARD only (the gap is the forward arc
+//  round the day). lib/common.glsl reads D and sets timeAngle = fract(D) and
+//  blissCloudTimeBase = D*24000. The one unavoidable per-frame value lives in a
+//  colortex15 texel (RAW float, no packer) because that is the only store the
+//  global time code can read in both the 130 and 430 passes -- a bare GLSL
+//  variable has no cross-frame memory, and an SSBO is 430-only / not included
+//  here. The exp-out helpers below remain as reference.
 
 #endif // BLISS_TIME_INTERP_GLSL

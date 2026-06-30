@@ -152,24 +152,24 @@
     #define CLOUD_CLOSED_AREA_CHECK
     #define CLOUD_ALT1 192 //[-96 -92 -88 -84 -80 -76 -72 -68 -64 -60 -56 -52 -48 -44 -40 -36 -32 -28 -24 -20 -16 -10 -8 -4 0 4 8 12 16 20 22 24 28 32 36 40 44 48 52 56 60 64 68 72 76 80 84 88 92 96 100 104 108 112 116 120 124 128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192 196 200 204 208 212 216 220 224 228 232 236 240 244 248 252 256 260 264 268 272 276 280 284 288 292 296 300 304 308 312 316 320 324 328 332 336 340 344 348 352 356 360 364 368 372 376 380 384 388 392 396 400 404 408 412 416 420 424 428 432 436 440 444 448 452 456 460 464 468 472 476 480 484 488 492 496 500 510 520 530 540 550 560 570 580 590 600 610 620 630 640 650 660 670 680 690 700 710 720 730 740 750 760 770 780 790 800]
     #define CLOUD_SPEED_MULT 100 //[0 5 7 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300 325 350 375 400 425 450 475 500 550 600 650 700 750 800 850 900]
-    // Cinematic time-transition reference duration, in SECONDS. NOTE
-    // (Iteration 16): the Eclipse-native path eases via the IRIS-maintained
-    // worldTimeSmooth uniform, whose rate is set by the engine, so this slider
-    // does NOT change that rate (an engine uniform cannot be reshaped by a
-    // shader option -- this is how Eclipse itself works). Kept as the documented
-    // target; left in place for the toggle's tooltip.
+    // Cinematic time-transition easing duration, in SECONDS. Iteration 17: the
+    // easing is computed in-shader (composite7) as ew = 1 - exp(-dt /
+    // TIME_TRANSITION_SPEED) with dt a frameTimeCounter delta, so THIS slider
+    // directly controls the glide duration. Larger = slower. 0.0 = instant.
     #define TIME_TRANSITION_SPEED 1.2 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
-    // Master switch for the Eclipse-NATIVE forward-rolling cinematic time (in
-    // the Performance screen). OFF by default (the pack is byte-identical when
-    // off). When ON, common.glsl reads Iris' engine-smoothed worldTimeSmooth /
-    // unsigned_WsunVecSmooth uniforms (exactly as the Eclipse Shader does) and
-    // sets timeAngle + the cloud advection clock from them, so the ENTIRE sun-
-    // vector pipeline (sky gradient, scattering, cloud lighting) AND the cloud
-    // advection glide forward together -- always through midnight, never
-    // rewinding, because Iris does the rolling. REQUIRES an Iris build that
-    // provides those uniforms; if absent it falls back to real time (no glide,
-    // no breakage). The Iris shadow map and vanilla sun/moon/star sprites are
-    // engine-placed from real time and still snap (same as Eclipse).
+    // Master switch for the forward-rolling cinematic time (Performance screen).
+    // OFF by default (the pack is byte-identical when off). When ON, composite7
+    // procedurally eases a visual day position FORWARD-ONLY toward the native
+    // time with the frameTimeCounter exp-out curve, and common.glsl sets
+    // timeAngle + the cloud advection clock from it, so the sky (gradient,
+    // scattering, cloud lighting) AND the cloud advection glide forward together
+    // on /time set, bed-sleep or time plugins -- always through midnight, never
+    // rewinding. The one per-frame value is kept in a colortex15 texel (a glide
+    // must remember last frame; a bare variable cannot, and an SSBO is not
+    // readable by this global time code in the 130 passes). The Iris shadow map
+    // and the vanilla sun/moon/star sprites are engine-placed from real time and
+    // still snap. If with this ON nothing animates, the colortex texel is not
+    // persisting in your Iris build -- turn it off to return to stock.
     //#define ECLIPSE_TIME_ACTIVE
     #define CLOUD_R 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
     #define CLOUD_G 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
@@ -746,30 +746,32 @@
       float blissNativeTimeAngle = (tAfrc * (1.0-tAmix) + tAfrs * tAmix + hA) * 0.5;
     #endif
 
-    // ---- Eclipse-NATIVE cinematic time (Iteration 16) -------------------
-    // Replicates the Eclipse Shader exactly: Iris itself maintains a forward-
-    // rolling, engine-smoothed world time (worldTimeSmooth) and sun vector
-    // (unsigned_WsunVecSmooth). Eclipse just reads them -- there is no shader-
-    // side accumulator/colortex/smooth(); the cross-frame easing and the
-    // through-midnight forward rolling are done in the engine, which is why it
-    // never runs backwards and needs no state here. We adopt the same source:
-    //   timeAngle          = fract(worldTimeSmooth / 24000)  -> GetSunVector,
-    //                          the lightVec day/night flip, sky noon/night
-    //                          factors and cloud LIGHTING all glide together,
-    //   blissCloudTimeBase = worldTimeSmooth + day*24000      -> cloud advection
-    //                          warps forward in sync (Bug 2).
-    // Availability probe: if the running Iris does not provide these uniforms
-    // the smoothed sun vector reads (0,0,0); we then fall back to the exact
-    // native time so nothing freezes or breaks. Gated to FRAGMENT + ECLIPSE so
-    // OFF and the vertex stage keep native time -- byte-identical. (The Iris
+    // ---- Eclipse procedural frameTimeCounter easing (Iteration 17) ------
+    // The Iteration 16 worldTimeSmooth / unsigned_WsunVecSmooth uniforms are
+    // NOT Iris built-ins (they read 0), so they are gone. The easing is now
+    // computed by us with the frameTimeCounter exp-out curve (in composite7).
+    //
+    // HONEST CONSTRAINT: a per-frame exp glide MUST remember last frame's
+    // visual time -- a bare common.glsl variable resets every frame and cannot
+    // accumulate, and frameTimeCounter alone gives the clock but not the prior
+    // anchor. The one tiny store readable by THIS global time code in BOTH the
+    // #version 130 (sky/composite/terrain) and 430 (deferred/clouds) passes is
+    // a colortex texel -- RV's SSBO is 430-only and not included here, and the
+    // smooth uniforms do not exist. So colortex15 holds ONE float: the visual
+    // day position D (unwrapped over a 100-day cycle), written as a RAW float
+    // (no 24-bit packer) in .r, with the seeded flag in .a. We just READ it:
+    //   timeAngle          = fract(D)   -> GetSunVector, the lightVec day/night
+    //                          flip, sky noon/night factors, cloud lighting,
+    //   blissCloudTimeBase = D * 24000  -> the cloud advection clock (warp).
+    // Gated FRAGMENT + ECLIPSE so OFF and the vertex stage keep native time --
+    // byte-identical. Unseeded -> native, so it can never freeze. (The Iris
     // shadow map and vanilla sun/moon/star sprites are engine-placed from real
-    // time and still snap, exactly as in Eclipse.)
+    // time and still snap.)
     #if defined ECLIPSE_TIME_ACTIVE && defined FRAGMENT_SHADER
-      bool blissSmoothAvailable = dot(unsigned_WsunVecSmooth, unsigned_WsunVecSmooth) > 0.25;
-      float timeAngle = blissSmoothAvailable ? fract(worldTimeSmooth / 24000.0)
-                                             : blissNativeTimeAngle;
-      float blissCloudTimeBase = blissSmoothAvailable ? (worldTimeSmooth + mod(worldDay, 100) * 24000.0)
-                                                      : (worldTime + mod(worldDay, 100) * 24000.0);
+      vec4 blissVisTimeState = texelFetch(colortex15, ivec2(0), 0);
+      float blissVisualDay = (blissVisTimeState.a > 0.5) ? blissVisTimeState.r : blissNativeTimeAngle;
+      float timeAngle = fract(blissVisualDay);
+      float blissCloudTimeBase = blissVisualDay * 24000.0;
     #else
       float timeAngle = blissNativeTimeAngle;
       float blissCloudTimeBase = (worldTime + mod(worldDay, 100) * 24000.0);
