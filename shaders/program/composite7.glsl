@@ -95,11 +95,14 @@ void main() {
         // first frame / uninitialised texel (.a flag clear) so there is no pop.
         vec3 storedSun = (prev.a > 0.5) ? normalize(prev.rgb * 2.0 - 1.0) : realSun;
 
-        // aligned > cos(~2 deg): normal drift -> snap (track real exactly).
-        // below: a jump (or mid-transition) -> exponential-out ease.
-        float aligned = dot(storedSun, realSun);
-        float ew = (aligned > 0.9994) ? 1.0
-                 : clamp(1.0 - exp(-frameTime / max(TIME_TRANSITION_SPEED, 0.0001)), 0.0, 1.0);
+        // Iteration 13: CONTINUOUS exponential-out easing toward the real sun
+        // EVERY frame -- no jump-detect snap. During normal play the real sun
+        // barely moves so the eased sun tracks it with an invisible constant
+        // lag; when worldTime JUMPS (/time set, sleeping, plugins) the eased sun
+        // glides across the whole gap over ~TIME_TRANSITION_SPEED s instead of
+        // snapping. frameTime is the real per-frame delta, so the curve is
+        // frame-rate independent: ew = 1 - exp(-dt / TIME_TRANSITION_SPEED).
+        float ew = clamp(1.0 - exp(-frameTime / max(TIME_TRANSITION_SPEED, 0.0001)), 0.0, 1.0);
         vec3 newSun = mix(storedSun, realSun, ew);
         newSun = (dot(newSun, newSun) > 1e-6) ? normalize(newSun) : realSun;
 

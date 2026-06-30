@@ -100,21 +100,19 @@ float bliss_GetVisualTimeFract(){
 // ---------------------------------------------------------------------
 //  Returns the world-space sun direction the sky/cloud lighting should use.
 //   - ECLIPSE_TIME_ACTIVE off: identity -> the real sun, byte-identical pack.
-//   - on: colortex15 stores the smoothed sun ENCODED to [0,1] (.rgb) with a
-//     seeded flag in .a (written by composite7's feedback pass). We return the
-//     stored sun ONLY while it is meaningfully off the real sun (i.e. a time
-//     JUMP is being eased); during normal play it equals the real sun, so we
-//     return the real sun directly -- perfectly smooth and free of any
-//     low-precision stepping from the encode. Unseeded / degenerate -> real
-//     sun, so the lighting can never go dark.
+//   - on: the CONTINUOUSLY-eased sun from colortex15, encoded to [0,1] (.rgb)
+//     with a seeded flag in .a (written by composite7's feedback pass). We
+//     always return the eased sun (Iteration 13: no snap-back-to-real gate) so
+//     the transition animation is fully active and visible -- during normal
+//     play it sits an invisible hair behind the real sun; during a time jump it
+//     is mid-glide. Unseeded / degenerate -> real sun, so it can never go dark.
 #ifdef ECLIPSE_TIME_ACTIVE
 	vec3 bliss_GetVisualSunVec(vec3 realSunVecWorld){
 		vec4 s = texelFetch(colortex15, ivec2(0), 0);
-		if (s.a < 0.5) return realSunVecWorld;                 // unseeded
+		if (s.a < 0.5) return realSunVecWorld;                 // unseeded -> real
 		vec3 stored = s.rgb * 2.0 - 1.0;                        // decode [0,1] -> [-1,1]
-		if (!(dot(stored, stored) > 1e-6)) return realSunVecWorld;
-		stored = normalize(stored);
-		return (dot(stored, realSunVecWorld) < 0.9994) ? stored : realSunVecWorld;
+		if (!(dot(stored, stored) > 1e-6)) return realSunVecWorld; // degenerate -> real
+		return normalize(stored);                              // the eased sun
 	}
 #else
 	vec3 bliss_GetVisualSunVec(vec3 realSunVecWorld){ return realSunVecWorld; }

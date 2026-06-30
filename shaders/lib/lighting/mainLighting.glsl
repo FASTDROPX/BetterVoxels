@@ -336,19 +336,40 @@ void DoLighting(inout vec4 color, inout vec3 shadowMult, vec3 playerPos, vec3 vi
                     cloudSample *= sqrt3(1.0 - abs(EdotL));
                     shadowMult *= 1.0 - 0.85 * cloudSample;
                 #elif defined CLOUDS_BLISS
-                    // Bliss terrain cloud shadows (Iteration 8). Sample a
-                    // Bliss-cell-scale BILLOW coverage (large mass * small cell,
-                    // the same abs() fold the clouds use) so the ground darkens
-                    // under the cumulus cells with cell-sized, moving shadows.
-                    // Texture-based + self-contained, so it compiles in the
-                    // terrain pass without pulling in the full cloud renderer.
+                    // Bliss terrain cloud shadows. Sample a Bliss-cell-scale
+                    // BILLOW coverage (large mass * small cell, the same abs()
+                    // fold the clouds use) so the ground darkens under the
+                    // cumulus cells. Texture-based + self-contained, so it
+                    // compiles in the terrain pass without pulling in the full
+                    // cloud renderer.
+                    //
+                    // Iteration 13 -- two fixes over Iteration 8:
+                    //  (1) MOVEMENT: advect with the SAME cloud_movement the
+                    //      Bliss cloud pass uses -- (worldTime-synced) /24 *
+                    //      Cloud_Speed * CLOUD_SPEED_MULT -- so the ground
+                    //      shadows drift in lockstep with the clouds and respond
+                    //      to the Cloud Speed slider. (Old code used syncedTime,
+                    //      which ignores both, leaving the shadows ~frozen.)
+                    //  (2) COVERAGE: drive the billow offset with the LIVE layer
+                    //      coverage (GUI CloudLayer*_coverage + Rain_coverage +
+                    //      clear-day scale, exactly as bliss_clouds derives it)
+                    //      so raising coverage darkens the terrain globally and a
+                    //      fully covered sky heavily shades the ground.
+                    // Recomputed inline (bliss_clouds.glsl is not in this pass).
+                    float blissCloudMove = (worldTime + mod(worldDay, 100) * 24000.0) / 24.0
+                                         * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01);
+                    float blissClearScale = mix(0.72, 1.0, rainStrength); // BLISS_CLEAR_COVERAGE
+                    float L0_COVERAGE = mix(CloudLayer0_coverage, Rain_coverage, rainStrength) * blissClearScale;
+                    float L1_COVERAGE = mix(CloudLayer1_coverage, 0.0,           rainStrength) * blissClearScale;
+                    float blissCover  = max(L0_COVERAGE, L1_COVERAGE - 0.5);
+
                     vec2 bcsPos = worldPos.xz + worldPos.y * 0.25;
-                    bcsPos.x += syncedTime;
-                    float bLarge = texture2D(noisetex, bcsPos * 0.00006).b;        // ~130-block masses
-                    float bSmall = texture2D(noisetex, bcsPos * 0.0007 + 0.37).b;   // ~22-block cells
-                    float bCov = clamp(abs(bLarge * 2.0 - 1.2) * 0.5 - (1.0 - bSmall) + 0.7, 0.0, 1.0);
+                    bcsPos += blissCloudMove;                                       // synced advection
+                    float bLarge = texture2D(noisetex, bcsPos * 0.00006).b;         // ~130-block masses
+                    float bSmall = texture2D(noisetex, bcsPos * 0.0007 + 0.37).b;    // ~22-block cells
+                    float bCov = clamp(abs(bLarge * 2.0 - 1.2) * 0.5 - (1.0 - bSmall) + blissCover, 0.0, 1.0);
                     bCov *= sqrt3(1.0 - abs(dot(eastVec, lightVec)));               // soften as the sun lowers
-                    shadowMult *= 1.0 - 0.80 * bCov;
+                    shadowMult *= 1.0 - 0.85 * bCov;
                 #else
                     vec2 csPos = worldPos.xz + worldPos.y * 0.25;
                     csPos.x += syncedTime;

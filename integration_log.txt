@@ -807,3 +807,87 @@ BALANCE / SAFETY CONFIRMATION (Iteration 12)
    - controls moved to Performance; Cloud Settings restored to original        : PASS
    - OFF path still byte-identical (all changes gated)                         : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 13 -- CONTINUOUS SUN-VECTOR EASING ENGAGEMENT AND
+                        DYNAMIC TERRAIN SHADOW ADVECTION
+=======================================================================
+Two logical defects after the Iteration 12 compile fix: (1) the time
+transition never animated, and (2) the Bliss terrain cloud shadows were
+static and ignored coverage.
+
+PART 1 -- CONTINUOUS, ACTIVE SUN-VECTOR EASING
+----------------------------------------------
+Cause: Iteration 12 added a "jump-detect" gate that snapped the visual sun
+back to the real sun during normal play (writer ew=1, reader returned the
+real sun whenever stored was within ~2 deg). That made the easing collapse
+to an instant snap and the animation effectively disappeared.
+
+Fix (composite7.glsl + timeInterpolation.glsl):
+  * Writer: removed the snap gate. The stored sun now eases toward the real
+    sun EVERY frame with the pure exponential-out step
+        ew = 1 - exp(-frameTime / TIME_TRANSITION_SPEED)
+    (frameTime = real per-frame delta -> frame-rate independent). During
+    normal play the real sun barely moves, so the eased sun tracks it with an
+    invisible constant lag; on a worldTime JUMP (/time set, sleeping, plugins)
+    it glides across the whole gap over ~TIME_TRANSITION_SPEED seconds.
+  * Reader (bliss_GetVisualSunVec): removed the "snap-back-to-real" branch;
+    it now always returns the continuously-eased stored sun (still falling
+    back to the real sun on an unseeded/degenerate texel so it can never go
+    dark). The animation is now fully engaged and visible on the clouds.
+
+Scope note (honest): the eased sun drives the BLISS CLOUD lighting direction
+(bright/dark side, silver lining, phase) and the cloud terrain-shadow sun
+term. The actual sun-DISK position, sky gradient, stars and the Iris-rendered
+SHADOW MAP still use the real sun: those are RV core systems, and the shadow
+map in particular is rendered by Iris from the true sun and cannot be eased
+shader-side without an unavoidable sun/shadow desync. Easing them would be a
+separate, core-pipeline change; this iteration keeps the easing in the safe,
+self-contained cloud-lighting domain and makes it continuous there.
+
+Precision note: colortex15 runs on the host default format (Iteration 12). On
+a low-precision default the encoded sun quantises to a fraction of a degree;
+the continuous ease is smooth at the default speed and only the very slowest
+slider settings could show faint stepping on an 8-bit buffer.
+
+PART 2 -- DYNAMIC TERRAIN CLOUD SHADOWS (movement + coverage)
+------------------------------------------------------------
+Cause (mainLighting.glsl, CLOUDS_BLISS branch from Iteration 8):
+  (a) advected by  syncedTime  (RV's generic cloud clock, scale 0.05) which
+      ignores Cloud_Speed / CLOUD_SPEED_MULT -> the shadows crawled out of
+      sync with the clouds and looked frozen, especially with Cloud Speed up.
+  (b) used a hard-coded +0.7 coverage offset -> raising the GUI cloud
+      coverage (or rain) did nothing to the ground shadows.
+
+Fix: recompute, INLINE (bliss_clouds.glsl is not included in the terrain
+pass), the exact quantities the cloud pass uses:
+  * MOVEMENT: blissCloudMove = (worldTime + mod(worldDay,100)*24000) / 24
+              * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01)   -- i.e. the cloud
+    pass's own cloud_movement. The billow sample coords now advect by this, so
+    the ground shadows drift in lockstep with the clouds and react to the
+    Cloud Speed slider.
+  * COVERAGE: derive LAYER0/1 coverage exactly as bliss_clouds does --
+        clearScale = mix(0.72, 1.0, rainStrength)          // BLISS_CLEAR_COVERAGE
+        L0 = mix(CloudLayer0_coverage, Rain_coverage, rainStrength) * clearScale
+        L1 = mix(CloudLayer1_coverage, 0.0,           rainStrength) * clearScale
+    and feed  max(L0, L1 - 0.5)  into the billow offset (replacing the hard
+    +0.7). Now raising coverage darkens the terrain globally and a fully
+    covered / rainy sky heavily shades the ground. Darkening strength bumped
+    0.80 -> 0.85 (matching the Reimagined branch) so full coverage bites.
+
+PRESERVED (per protocol): the non-crashing colortex15 layout (pipelineSettings
+/ uniforms), the relocated GUI switches in PERFORMANCE_SETTINGS, the gated OFF
+== byte-identical guarantee, and all Iteration 6-12 cloud shape / radiance /
+weather / fog work.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 13)
+   - continuous ease: no snap gate in writer or reader                       : PASS
+   - ease is frame-rate independent (frameTime) and bounded [0,1]            : PASS
+   - reader still falls back to real sun on unseeded/degenerate texel        : PASS
+   - terrain shadow advects by the cloud pass's cloud_movement (Cloud_Speed) : PASS
+   - terrain shadow coverage uses live LAYER0/1 (GUI + rain + clearScale)    : PASS
+   - cloud #defines (Cloud_Speed/CloudLayer*_coverage/Rain_coverage) in scope: PASS
+   - mod(worldDay,100) form already compiles in common.glsl (GLSL 130)       : PASS
+   - OFF path still byte-identical (all Eclipse changes gated)               : PASS
+=======================================================================
