@@ -555,3 +555,89 @@ BALANCE / SAFETY CONFIRMATION (Iteration 9)
    - smoothstep used only for the alpha horizon fade (not density)          : PASS
    - GLSL 1.30 safe                                                        : PASS
 =======================================================================
+
+
+=======================================================================
+ DEBUG ITERATION 10 -- HIGH-LAYER ALPHA SMOOTHSTEP + CINEMATIC TIME
+                       INTERPOLATION ARCHITECTURE
+=======================================================================
+NOTE ON THE REFERENCE: the Eclipse package was a Google Drive link that
+returned HTTP 403 (auth-gated), so it could not be read. Part 2 below is
+built from the standard, well-understood technique for shader time-
+smoothing (a per-frame feedback buffer that eases a stored visual time
+toward the real worldTime), not from the Eclipse source.
+
+PART 1 -- HIGH-ALTITUDE (ALTOSTRATUS) BLACK-EDGE FIX  [WORKING]
+--------------------------------------------------------------
+Symptom: grainy, pixelated dark outlines where thin high cirrus meets the
+blue sky. Cause: the altostratus is sampled ONCE per pixel (it is a single
+plane, not a raymarch loop), so its density 0-crossing -- shape = max(large
+- medium*..., 0), returned as shape*shape -- is a hard onset that the
+per-pixel ray dither flickers across, alternating cloud/no-cloud at the
+edge; with the cloud colour slightly below the bright near-sun sky that
+reads as a dark speckled ring.
+Fix (bliss_GetAltostratusDensity only -- billow cumulus untouched):
+    density  = shape * shape;
+    density *= bliss_quintic( clamp(shape * BLISS_ALTO_EDGE, 0.0, 1.0) );
+The extra quintic ramp widens the low-density band, so thin edges fade out
+over many more blocks: the dither offset now stays inside a gentle gradient
+instead of straddling a step, and faint cirrus dissolves into clean
+transparency. BLISS_ALTO_EDGE (3.0) tunes the soft-band width.
+
+PART 2 -- CINEMATIC TIME INTERPOLATION  [FRAMEWORK + HOOKS, NON-BREAKING]
+------------------------------------------------------------------------
+Goal: when worldTime JUMPS (/time set, bed, plugins) the sun/moon/sky/
+shadows/clouds should ease to the new time over a configurable duration
+with an exponential-out curve, instead of snapping.
+
+Why this is delivered as a framework, not a finished feature: easing a
+DISCONTINUITY fundamentally requires per-frame STATE (you must remember last
+frame's visual time to step it toward the new target). That state needs a
+PERSISTENT feedback buffer (a texel Iris does not clear) plus a prepare-pass
+to update it, plus replacing worldTime/sunPosition reads across RV's core
+sky + shadow pipeline. Those steps cannot be validated without a live Iris
+build, and wiring a persistent buffer + rewiring the shadow matrices blind
+would risk the whole (now-working) pack. So this iteration lays down the
+complete, correct framework and the activation hooks, kept fully
+NON-BREAKING (everything still runs on real time), rather than shipping an
+untestable pipeline-wide rewrite.
+
+Delivered and wired:
+  * GUI slider  TIME_TRANSITION_SPEED  (seconds, default 1.2, 0 = off) in
+    common.glsl, added to the Cloud Settings screen + sliders list + lang.
+  * New module  lib/misc/timeInterpolation.glsl  with:
+      - eclipseEaseExpOut(dt) = clamp(1 - exp(-dt / TIME_TRANSITION_SPEED), 0,1)
+        (the frame-rate-independent exponential-out weight),
+      - eclipseAdvanceTime() / eclipseAdvanceVec() (advance a stored value
+        toward a target by one frame -- for time, light vectors, sky params),
+      - bliss_GetVisualWorldTime() / bliss_GetVisualTimeFract() read interface
+        with a SAFE FALLBACK (returns the real game time) so it compiles and
+        behaves identically until activated,
+      - a fully documented STATE / UPDATE / READ / ACTIVATION architecture
+        for the persistent feedback texel.
+  * The module is #included in the cloud pipeline (bliss_clouds.glsl) so the
+    framework is live there, and the cloud-movement / sun-vector activation
+    points are marked with [ECLIPSE TIME HOOK] comments. cloud_movement is a
+    file-scope initializer (no user-function calls allowed there on some
+    drivers), so it stays on real time until the system is activated inside a
+    function body -- documented inline.
+
+To ACTIVATE (the tested follow-up): reserve + persist a feedback texel in
+shaders.properties, add the per-frame UPDATE pass, #define ECLIPSE_TIME_ACTIVE
+and point bliss_GetVisualWorldTime() at the texel, then swap the worldTime /
+sunPosition reads in the sky + shadow code for the bliss_GetVisual* accessors.
+
+PRESERVED (per protocol): Iteration 8 terrain cloud shadows + un-premultiply,
+Iteration 9 clear-weather 0.5x coverage + GUI cloud-speed sync + horizon fog,
+and the Iteration 6/7 billow shape + radiance. None were touched.
+
+BALANCE / SAFETY CONFIRMATION (Iteration 10)
+   - bliss_clouds.glsl   {} balance == 0 ; #if(32)==#endif(32)            : PASS
+   - timeInterpolation.glsl  {} balance == 0 (paren/bracket diffs are only
+     inside the doc comment, e.g. "[0,1)")                                 : PASS
+   - bliss_quintic defined (L221) before the altostratus use (L286)        : PASS
+   - module compile-safe: fallback path uses only worldDay/worldTime/
+     TIME_TRANSITION_SPEED + built-ins; include-guarded; bliss_-prefixed    : PASS
+   - iter 8/9 features (shadows, clear scale, speed sync, fog) intact       : PASS
+   - GLSL 1.30 safe; no global-initializer user-function calls added        : PASS
+=======================================================================

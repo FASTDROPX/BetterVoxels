@@ -15,6 +15,11 @@
 =======================================================================
 */
 #include "/lib/atmospherics/clouds/bliss_clouds_compat.glsl"
+// Iteration 10: cinematic time-interpolation framework (Eclipse-style). Laid
+// down + available in the cloud pipeline; bliss_GetVisualWorldTime() returns
+// the real time until the feedback buffer is wired (see the module header), so
+// this is non-breaking. The cloud-movement / sun-vector HOOKS are marked below.
+#include "/lib/misc/timeInterpolation.glsl"
 
 // --- Iteration 9 tunables (weather / speed / horizon -- NOT shape or radiance) ---
 // Clear-weather coverage scale: rainStrength is 0 on clear days and 1 in
@@ -25,6 +30,11 @@
 // render distance, so the deck dissolves into haze instead of clipping.
 #define BLISS_FOG_START 0.55
 #define BLISS_FOG_END   1.25
+// Iteration 10: altostratus edge softness. The high layer is sampled ONCE per
+// pixel, so a hard density 0-crossing flickers under the ray dither into a
+// grainy dark ring. This widens the low-density onset so thin edges dissolve
+// smoothly into clean transparency. Higher = sharper (smaller soft band).
+#define BLISS_ALTO_EDGE 3.0
 
 #ifdef HQ_CLOUDS
 	int maxIT_clouds = minRayMarchSteps;
@@ -85,6 +95,15 @@ float LAYER2_DENSITY = mix(dailyWeatherParams1.z,0.05,rainStrength);
 // a percent where 100 = baseline) so cloud motion can be tuned or paused from
 // the in-game menu. At the defaults (Cloud_Speed 1.0, CLOUD_SPEED_MULT 100) this
 // equals the previous fixed baseline.
+//
+// [ECLIPSE TIME HOOK] cloud_movement is a file-scope initializer, so it cannot
+// call bliss_GetVisualWorldTime() here (GLSL forbids user-function calls in
+// global initializers on some drivers). When the smooth-time feedback buffer is
+// active, move this expression into a function body and swap
+//   (worldTime + mod(worldDay,100)*24000.0)  ->  smoothed visual ticks, e.g.
+//   mod(bliss_GetVisualWorldTime(), 100.0*24000.0)
+// so the cloud drift eases through time jumps with the sun. Kept on real time
+// for now (non-breaking; preserves the Iteration 9 speed sync).
 float cloud_movement = (worldTime  + mod(worldDay,100)*24000.0) / 24.0 * Cloud_Speed * (CLOUD_SPEED_MULT * 0.01);
 
 // =====================================================================
@@ -258,7 +277,14 @@ float bliss_GetAltostratusDensity(vec3 pos){
 
 	float shape = max(large - medium*0.4 * clamp(1.5-large,0.0,1.0),0.0);
 
-	return shape*shape;
+	// Iteration 10: the high layer is a SINGLE sample per pixel, so the original
+	// hard onset (shape*shape off a max(...,0) cut) flickered under the ray
+	// dither into a grainy dark silhouette ring where thin cirrus meets the sky.
+	// Multiply by a smooth quintic ramp over the low-density band so faint edges
+	// dissolve gradually into clean transparency instead of a hard threshold.
+	float density = shape * shape;
+	density *= bliss_quintic(clamp(shape * BLISS_ALTO_EDGE, 0.0, 1.0));
+	return density;
 }
 
 float bliss_cloudCov(int layer, in vec3 pos, vec3 samplePos, float minHeight, float maxHeight){
