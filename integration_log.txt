@@ -1512,3 +1512,70 @@ VERIFICATION (Iteration 22)
    - OFF -> byte-identical to stock                                             : PASS
    - toggle + slider render in Performance Settings                            : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 23: Implemented Dynamic GLSL Easing Re-Scaler Linked to
+Performance Slider
+=======================================================================
+GOAL. Make the TIME_TRANSITION_SPEED slider actually change the glide speed on
+the Iteration 22 engine-smooth baseline. It was inert because shaders.properties
+cannot read GLSL runtime defines, so its single hardcoded 1.2s smooth() fade was
+fixed regardless of the slider.
+
+WHY THE LITERAL "10s + GLSL RESCALE" PLAN CANNOT WORK (and what we did instead).
+The proposed method -- bake one ultra-slow 10s smooth() uniform, then compress
+the curve in common.glsl from the slider -- is not achievable, for the same
+memory reason documented since Iteration 17: the engine hands the shader ONE
+smoothed (sin,cos) sample per frame. From a single sample the shader cannot know
+how far into the transition it is (that needs the start value / elapsed time =
+per-frame shader state the engine-smooth path does not expose). Any static remap
+that pulls the sample toward the target therefore lands off the old value at the
+jump instant -> a visible SNAP, exactly what we are trying to remove. eclMag
+(chord depth) is 1 at BOTH ends of a transition, so it is not a usable progress
+clock either.
+
+THE CORRECT REALIZATION (multi-tier engine smoothing). Instead of rescaling one
+uniform, we pre-bake SEVEN engine-smoothed sin/cos pairs at fixed fade tiers in
+shaders.properties (ids 231-244):
+   0.4s  0.8s  1.2s  2.0s  3.0s  5.0s  10.0s   (each is smooth(id, sin/cos, t, t))
+Each tier is a REAL cross-frame-smoothed uniform running at its own speed -- no
+snap, no shader-side state. common.glsl then selects the pair whose fade matches
+TIME_TRANSITION_SPEED with a ternary ladder. Because the slider is a compile-
+time constant float literal, the ladder constant-folds to a SINGLE pair -> zero
+runtime cost, effectively compile-time selection with runtime syntax (a
+preprocessor #if cannot be used: GLSL #if is integer-only and chokes on the 1.2
+float define). Slider -> tier map:
+   0.2,0.4 ->0.4 | 0.6,0.8 ->0.8 | 1.0,1.2,1.4 ->1.2 | 1.6,1.8,2.0 ->2.0
+   2.5,3.0 ->3.0 | 4.0,5.0 ->5.0 | 7.0,10.0 ->10.0 | 0.0 -> OFF (instant snap)
+So the slider genuinely drives the duration across a 25x range (0.4s..10s), with
+no snap at any setting.
+
+CLOUD / SHADOW SYNC. blissCloudTimeBase still rides eclSunAngle reconstructed
+from the SELECTED tier, so the clouds and terrain cloud-shadows time-lapse warp
+at exactly the slider-chosen speed, locked to the sun and sky. Slider 0.0 sets
+eclEnabled=false -> timeAngle and blissCloudTimeBase fall back to native (vanilla
+instant snap), matching the "OFF (Instant)" GUI label.
+
+FILES.
+  - shaders.properties: the single blissSunAngleS/C pair replaced by 14 tiered
+    uniforms (blissSunAngle{S,C}{04,08,12,20,30,50,100}), ids 231-244.
+  - lib/uniforms.glsl: declares the 14 tier uniforms under #ifdef ECLIPSE_TIME_ACTIVE.
+  - lib/common.glsl: ternary tier-select into local blissSunAngleS/C + eclEnabled
+    gate; rest of the eased-angle math and blissCloudTimeBase unchanged.
+  - lang/en_US.lang: TIME_TRANSITION_SPEED tooltip rewritten -- the slider is now
+    a LIVE 7-tier speed control (0.0 = OFF/Instant).
+
+PRESERVED. Iteration 22 engine-smooth architecture intact (no SSBO, no feedback
+texture). ECLIPSE_TIME_ACTIVE toggle + slider layout unchanged. OFF path (toggle
+disabled) still byte-identical to stock.
+
+VERIFICATION (Iteration 23)
+   - 14 tier uniforms defined (231-244), declared, and selected -- names match   : PASS
+   - slider constant-folds to one pair (no runtime branch, no #if float error)    : PASS
+   - each tier is a real engine-smoothed uniform -> no snap at any speed          : PASS
+   - slider 0.0 -> instant native snap (OFF label honoured)                       : PASS
+   - clouds + terrain shadows ride the selected tier -> synced to slider speed    : PASS
+   - no stale bare blissSunAngleS/C uniform references remain                     : PASS
+   - toggle disabled -> byte-identical to stock                                   : PASS
+=======================================================================

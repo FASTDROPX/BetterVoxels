@@ -427,7 +427,7 @@ option.CLOUD_SPEED_MULT=Cloud Speed
 option.CLOUD_SPEED_MULT.comment=Determines how fast the clouds are going to move. "Synced to World Time" setting uses Minecraft world time to advance the cloud positions; this allows for clouds to appear the same between players in the same server. §e[*]§r This setting only works with the "Reimagined" or "Unbound" Cloud Styles.
 value.CLOUD_SPEED_MULT.100=Synced to World Time
 option.TIME_TRANSITION_SPEED=Time Transition Speed
-option.TIME_TRANSITION_SPEED.comment=Reference duration (seconds) for the Eclipse time-transition glide. §e[*]§r The actual easing is now done by an engine-maintained smooth() uniform whose fade time is set in shaders.properties (default 1.2s, matching this); a GUI slider cannot drive an engine uniform, so to retune the speed edit the two blissSunAngle* fade numbers there. This control is kept for reference and only matters while §aEclipse Time Transition§r is enabled.
+option.TIME_TRANSITION_SPEED.comment=How long (in seconds) the Eclipse time-transition glide takes when the world time jumps. §e[*]§r This is now a LIVE control: the pack keeps seven engine-smoothed speed tiers (0.4 / 0.8 / 1.2 / 2.0 / 3.0 / 5.0 / 10.0 s) and the shader picks the tier nearest your setting, so higher values give a slower, more cinematic glide and lower values a quick catch-up. §e[*]§r 0.0 = OFF (Instant): easing is skipped and time snaps like vanilla. §e[*]§r Only has any effect while §aEclipse Time Transition§r is enabled.
 value.TIME_TRANSITION_SPEED.0.0=OFF (Instant)
 
 option.ECLIPSE_TIME_ACTIVE=Eclipse Time Transition
