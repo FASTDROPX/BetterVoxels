@@ -847,6 +847,17 @@
     int modifiedWorldDay = int(mod(worldDay, 100) + 5.0);
     float syncedTime = (worldTime + modifiedWorldDay * 24000) * 0.05;
 
+    // Iteration 24: syncedTime-scale clock for the Reimagined & Unbound cloud
+    // wind (and their ModifyTracePos terrain shadows), derived from the Bliss
+    // cloud clock so ALL three cloud styles share the same eased visual timeline.
+    // blissCloudTimeBase already equals the stock worldTime clock whenever Eclipse
+    // easing is off, and modifiedWorldDay == mod(worldDay,100)+5, so
+    // (blissCloudTimeBase + 5*24000)*0.05 is EXACTLY syncedTime then
+    // (byte-identical to stock); when easing is on it rides the eased sun, so
+    // Reimagined/Unbound clouds time-lapse warp in lock-step with the Bliss
+    // clouds and the sun on a /time set.
+    float blissCloudSyncedTime = (blissCloudTimeBase + 120000.0) * 0.05;
+
     const float pi = 3.14159265359;
     const float goldenRatio = 1.61803398875;
 

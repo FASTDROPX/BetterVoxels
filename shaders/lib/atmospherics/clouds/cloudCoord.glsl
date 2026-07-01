@@ -16,10 +16,18 @@
 
     vec3 ModifyTracePos(vec3 tracePos, int cloudAltitude) {
         #if CLOUD_SPEED_MULT == 100
-            float wind = syncedTime;
+            // Iteration 24: blissCloudSyncedTime == syncedTime when Eclipse easing
+            // is off (byte-identical), and rides the eased visual clock when on, so
+            // Reimagined clouds + their terrain shadows time-lapse warp with the sun.
+            float wind = blissCloudSyncedTime;
         #else
             #define CLOUD_SPEED_MULT_M CLOUD_SPEED_MULT * 0.01
             float wind = frameTimeCounter * CLOUD_SPEED_MULT_M;
+            #ifdef ECLIPSE_TIME_ACTIVE
+                // Custom cloud speed stays real-time (frameTimeCounter) normally,
+                // but warps onto the eased world-visual clock during a transition.
+                if (eclActive) wind = blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
+            #endif
         #endif
         tracePos.x += wind;
         tracePos.z += cloudAltitude * 64.0;

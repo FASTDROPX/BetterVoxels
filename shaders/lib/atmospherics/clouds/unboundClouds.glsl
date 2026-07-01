@@ -37,10 +37,18 @@ float GetCloudNoise(vec3 tracePos, int cloudAltitude, float lTracePosXZ, float c
 
     #if CLOUD_SPEED_MULT == 100
         #define CLOUD_SPEED_MULT_M CLOUD_SPEED_MULT * 0.01
-        wind *= syncedTime;
+        // Iteration 24: blissCloudSyncedTime == syncedTime when Eclipse easing is
+        // off (byte-identical), and rides the eased visual clock when on, so
+        // Unbound clouds time-lapse warp with the sun and the other cloud styles.
+        wind *= blissCloudSyncedTime;
     #else
         #define CLOUD_SPEED_MULT_M CLOUD_SPEED_MULT * 0.01
         wind *= frameTimeCounter * CLOUD_SPEED_MULT_M;
+        #ifdef ECLIPSE_TIME_ACTIVE
+            // Custom cloud speed stays real-time normally, but warps onto the
+            // eased world-visual clock during a transition. (wind base 0.0006.)
+            if (eclActive) wind = 0.0006 * blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
+        #endif
     #endif
     #if CLOUD_UNBOUND_SIZE_MULT != 100
         tracePosM *= CLOUD_UNBOUND_SIZE_MULT_M;

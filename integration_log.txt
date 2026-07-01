@@ -1579,3 +1579,66 @@ VERIFICATION (Iteration 23)
    - no stale bare blissSunAngleS/C uniform references remain                     : PASS
    - toggle disabled -> byte-identical to stock                                   : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 24: Synchronized Reimagined and Unbound Cloud Layers to
+the Engine-Smooth Visual Timeline
+=======================================================================
+PROBLEM. Only the Bliss cloud style rode the eased visual clock; switching Cloud
+Style to Reimagined or Unbound left those layers static -> they snapped on a
+/time set instead of time-lapse warping with the sun.
+
+ROOT CAUSE. The Reimagined and Unbound advection ("wind") is driven by RV's
+shared syncedTime (= (worldTime + modifiedWorldDay*24000)*0.05) in the "Synced to
+World Time" speed mode, or by frameTimeCounter for a custom Cloud Speed. Neither
+is aware of the Eclipse eased clock, so those clouds never eased.
+
+THE SINGLE-CLOCK FIX. Added ONE derived clock in common.glsl:
+    float blissCloudSyncedTime = (blissCloudTimeBase + 120000.0) * 0.05;
+blissCloudTimeBase is the Bliss cloud clock: it already equals the stock worldTime
+clock whenever Eclipse easing is off, and rides the eased sun angle when on. Since
+modifiedWorldDay == mod(worldDay,100)+5 and 5*24000 == 120000, this expression is
+ALGEBRAICALLY EXACTLY syncedTime when easing is off (byte-identical stock look),
+and the eased Bliss-synced clock when on. So all three cloud styles now share one
+timeline.
+
+WIRING (only the cloud-wind path is touched; the shared syncedTime used by stars,
+aurora, nebula is left alone):
+  - lib/atmospherics/clouds/cloudCoord.glsl (ModifyTracePos) -- drives BOTH the
+    Reimagined cloud noise advection AND the Reimagined terrain cloud-shadow
+    advection (mainLighting.glsl:319/329). "Synced" mode: syncedTime ->
+    blissCloudSyncedTime (unconditional; identical when off). Custom-speed mode:
+    stays frameTimeCounter (real-time) normally, but during a transition
+    (eclActive) warps onto blissCloudSyncedTime * (CLOUD_SPEED_MULT*0.01).
+  - lib/atmospherics/clouds/unboundClouds.glsl (GetCloudNoise wind) -- same swap:
+    "Synced" mode wind *= blissCloudSyncedTime; custom-speed mode warps onto the
+    eased clock (0.0006 * blissCloudSyncedTime * mult) when eclActive.
+
+RATE SAFETY. syncedTime's *0.05 makes its steady-state rate (~1.0/s in daylight)
+equal frameTimeCounter's, so switching the custom-speed branch onto
+blissCloudSyncedTime during a transition preserves the drift feel -- only the
+absolute phase (an invisible constant) differs, plus the desired warp on a jump.
+The Bliss cloud structures and the shaders.properties smooth() hooks were NOT
+touched (directive #3).
+
+SCOPE. blissCloudSyncedTime is defined unconditionally (next to syncedTime), so it
+resolves in every pass the cloud code compiles in. eclActive is referenced only
+inside #ifdef ECLIPSE_TIME_ACTIVE guards (it exists only there).
+
+BYTE-IDENTITY MATRIX
+  toggle OFF                         : blissCloudSyncedTime == syncedTime, custom
+                                       branch == frameTimeCounter -> stock exactly
+  toggle ON, slider 0.0 (eclActive=0): blissCloudTimeBase == native worldTime clock
+                                       -> blissCloudSyncedTime == syncedTime; instant
+  toggle ON, slider >0, time jump    : Bliss + Reimagined + Unbound clouds AND the
+                                       Reimagined terrain shadows warp together
+
+VERIFICATION (Iteration 24)
+   - blissCloudSyncedTime == syncedTime when easing off (algebraic + guards)      : PASS
+   - Reimagined clouds + shadows ride ModifyTracePos -> blissCloudSyncedTime       : PASS
+   - Unbound clouds ride blissCloudSyncedTime                                      : PASS
+   - custom Cloud Speed preserved off; warps only during a transition             : PASS
+   - shared syncedTime (stars/aurora/nebula) untouched                            : PASS
+   - Bliss cloud + shaders.properties smooth() hooks untouched                    : PASS
+=======================================================================
