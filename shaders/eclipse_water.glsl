@@ -258,4 +258,50 @@ vec3 EclipseRipples(vec2 fragCoord) {
     return vec3(circles, sqrt(1.0 - dot(circles, circles)));
 }
 
+// ---------------------------------------------------------------------------
+// Iteration 29 -- WORLD-ANCHORED TRAILING PLAYER WAKE.
+// The Iteration 27 wake was a single ring re-centred on the player every frame,
+// so it slid rigidly with the character. This instead anchors concentric rings
+// to a fixed 3x3 neighbourhood of WORLD-GRID cells around the player. Each
+// cell's rings are a function of world position and ABSOLUTE time
+// (phase = worldDist*freq - frameTimeCounter*speed), so their crests are locked
+// to world space and expand outward over time -- they do NOT translate with the
+// player. A cell only radiates while the player is near it, gated by camera
+// speed, so as the player moves the cells behind fade out and cells ahead light
+// up: a true trailing wake that decouples from the player's immediate position.
+// Fully procedural (cameraPosition / previousCameraPosition / frameTimeCounter),
+// no buffers, no Eclipse-mod uniforms. Returns a tangent-plane gradient to add
+// to the wave bump. (Persisting rings forever after the player leaves would need
+// per-emission history = a feedback buffer; this is the closest buffer-free
+// approximation and reads as a fading world-locked wake.)
+vec2 EclipseWorldWake(vec2 surfXZ, vec3 camPos, vec3 prevCamPos) {
+    vec2 vel = (camPos - prevCamPos).xz;
+    float speed = length(vel);
+    float moveGate = smoothstep(0.003, 0.06, speed);
+    if (moveGate < 0.001) return vec2(0.0);
+
+    const float CELL = 2.5;       // wake-source spacing, blocks
+    const float RING_FREQ = 5.0;  // rings per block
+    const float RING_SPEED = 4.0; // outward crest speed
+
+    vec2 grad = vec2(0.0);
+    vec2 baseCell = floor(camPos.xz / CELL);
+    for (int gx = -1; gx <= 1; gx++) {
+        for (int gz = -1; gz <= 1; gz++) {
+            vec2 cellCenter = (baseCell + vec2(float(gx), float(gz)) + 0.5) * CELL;
+            // Only cells the player is currently near radiate; this is the
+            // time-attenuated distance decay -- as the player leaves a cell its
+            // rings fade, leaving a trail.
+            float active = smoothstep(CELL * 1.6, 0.0, length(camPos.xz - cellCenter));
+            vec2 rel = surfXZ - cellCenter;
+            float d = length(rel);
+            float band = smoothstep(4.0, 0.4, d);            // ring extent from the cell
+            float phase = d * RING_FREQ - frameTimeCounter * RING_SPEED;
+            // gradient of cos(phase) points radially -> perturbs the surface normal
+            grad += (rel / max(d, 0.001)) * (-sin(phase)) * active * band;
+        }
+    }
+    return grad * moveGate;
+}
+
 #endif // INCLUDE_ECLIPSE_WATER

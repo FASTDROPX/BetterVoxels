@@ -109,8 +109,8 @@
         #endif
     #endif
 
-    #define WATER_STYLE_DEFINE -1 //[-1 1 2 3]
-    #define WATER_CAUSTIC_STYLE_DEFINE -1 //[-1 1 3]
+    #define WATER_STYLE_DEFINE -1 //[-1 1 2 3 4]
+    #define WATER_CAUSTIC_STYLE_DEFINE -1 //[-1 1 3 4]
     #define WATER_REFRACTION_INTENSITY 2.0 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.2 2.4 2.6 2.8 3.0]
     #define WATER_FOAM_I 100 //[0 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150]
     #define WATER_ALPHA_MULT 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300 325 350 375 400 425 450 475 500 550 600 650 700 750 800 850 900]
@@ -130,13 +130,12 @@
     #define WATER_SPEED_MULT 1.10 //[0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.05 1.10 1.15 1.20 1.25 1.30 1.35 1.40 1.45 1.50 1.55 1.60 1.65 1.70 1.75 1.80 1.85 1.90 1.95 2.00 2.20 2.40 2.60 2.80 3.00 3.25 3.50 3.75 4.00 4.50 5.00]
     #define WATER_SIZE_MULT 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
     // ---- Eclipse water mode (Iteration 25: "Hydro-Voxel Fusion") ----------
-    // Separate selectable water pipeline ported from the Eclipse Shader
-    // (/eclipse_water.glsl). 0 = stock RV/Complementary water, byte-identical
-    // to the Iteration 24 build; 1 = Eclipse procedural wave deformation,
-    // analytical wave normals, wave-geometry refraction and caustics. The
-    // GUI identifier is ECLIPSE_WATER because RV's core already reserves the
-    // WATER_STYLE token for its own vanilla/fancy switch.
-    #define ECLIPSE_WATER 0 //[0 1]
+    // Eclipse water is now a native Water Style (Iteration 29): selecting
+    // "Eclipse" in the Water Style option (WATER_STYLE_DEFINE == 4) enables the
+    // whole Eclipse pipeline. The internal ECLIPSE_WATER flag is DERIVED from
+    // WATER_STYLE == 4 further down (after WATER_STYLE is resolved), so there is
+    // no separate toggle. The sliders below only tune Eclipse and are ignored in
+    // every other Water Style, so the fallback stays byte-identical.
     #define ECLIPSE_WATER_WAVE_STRENGTH 1.0 //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
     #define ECLIPSE_WATER_WAVE_SPEED 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
     #define ECLIPSE_PATCHY_WAVE_BLEND 1.0 //[0.0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
@@ -511,6 +510,19 @@
         #define WATER_CAUSTIC_STYLE WATER_STYLE
     #else
         #define WATER_CAUSTIC_STYLE WATER_CAUSTIC_STYLE_DEFINE
+    #endif
+    // Iteration 29: Eclipse water is Water Style 4. Derive the internal flag the
+    // whole Eclipse pipeline gates on (ECLIPSE_WATER == 1) from it, so choosing
+    // "Eclipse" turns on the physics waves AND the full optical styling at once,
+    // and any other Water Style (Vanilla / Reimagined / Unbound) leaves it 0 --
+    // a byte-identical fallback to the Iteration 22 baseline. WATER_STYLE == 4
+    // also satisfies RV's own WATER_STYLE >= 2 / >= 3 high-quality gates, so the
+    // base water pipeline (tbnMatrix, normal maps, alpha) is fully active for
+    // Eclipse to override.
+    #if WATER_STYLE == 4
+        #define ECLIPSE_WATER 1
+    #else
+        #define ECLIPSE_WATER 0
     #endif
     #if AURORA_STYLE_DEFINE == -1
         #define AURORA_STYLE AURORA_STYLE_DEFAULT

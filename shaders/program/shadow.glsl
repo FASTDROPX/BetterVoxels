@@ -50,8 +50,10 @@ void DoNaturalShadowCalculation(inout vec4 color1, inout vec4 color2) {
     #include "/lib/materials/materialMethods/connectedGlass.glsl"
 #endif
 
-#if ECLIPSE_WATER == 1 && WATER_CAUSTIC_STYLE >= 3
-    // Iteration 25: Eclipse caustic field for the water shadow color.
+#if WATER_CAUSTIC_STYLE == 4
+    // Iteration 29: Eclipse caustic field for the water shadow color. Keyed off
+    // Water Caustic Style == Eclipse (which "Same as Water" resolves to when the
+    // base style is Eclipse), independent of the base water style itself.
     #include "/eclipse_water.glsl"
 #endif
 
@@ -107,8 +109,8 @@ void main() {
                                 color1.rgb = pow2(color1.rgb) * vec3(2.5, 3.0, 3.0) * 0.96;
                             #endif
                         #else
-                            #if ECLIPSE_WATER == 1
-                                // Iteration 25: sunlight entering the water medium
+                            #if WATER_CAUSTIC_STYLE == 4
+                                // Iteration 25/29: sunlight entering the water medium
                                 // projects the SAME Eclipse wave field the surface
                                 // renders (voxel caustics), advected by the smooth
                                 // visual clock. Output is shaped into RV's original

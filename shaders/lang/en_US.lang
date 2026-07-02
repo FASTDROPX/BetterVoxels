@@ -430,12 +430,8 @@ option.TIME_TRANSITION_SPEED=Time Transition Speed
 option.TIME_TRANSITION_SPEED.comment=How long (in seconds) the Eclipse time-transition glide takes when the world time jumps. §e[*]§r This is now a LIVE control: the pack keeps seven engine-smoothed speed tiers (0.4 / 0.8 / 1.2 / 2.0 / 3.0 / 5.0 / 10.0 s) and the shader picks the tier nearest your setting, so higher values give a slower, more cinematic glide and lower values a quick catch-up. §e[*]§r 0.0 = OFF (Instant): easing is skipped and time snaps like vanilla. §e[*]§r Only has any effect while §aEclipse Time Transition§r is enabled.
 value.TIME_TRANSITION_SPEED.0.0=OFF (Instant)
 
-option.ECLIPSE_WATER=Water Physics Style
-option.ECLIPSE_WATER.comment=Selects the water rendering pipeline. §e[*]§r RV / Complementary: the stock Rethinking Voxels water, byte-identical to the previous build. §e[*]§r Eclipse Physics & Waves: injects the complete procedural wave engine ported from the Eclipse Shader -- physical vertex crest/trough deformation, 3-octave rotated-fBm analytical wave normals with wave-height parallax and rain-drop ripples, tailored wave-slope refraction, and Eclipse caustics (needs Water Caustic Style: Fancy). The morphing surface positions are streamed straight into RV's voxel light sampling and the wave normals into the SSR reflect vectors, so colored voxel light and reflections warp across the moving waves in real time. §e[*]§r In Eclipse mode the wave surface replaces the RV/interactive-water surface normals. Configure it in Eclipse Water Settings.
-value.ECLIPSE_WATER.0=RV / Complementary
-value.ECLIPSE_WATER.1=Eclipse Physics & Waves
 screen.ECLIPSE_WATER_SETTINGS=Eclipse Water Settings
-screen.ECLIPSE_WATER_SETTINGS.comment=Wave physics controls for the Eclipse water mode. These only take effect while §aWater Physics Style§r is set to §aEclipse Physics & Waves§r.
+screen.ECLIPSE_WATER_SETTINGS.comment=Wave physics, optics and interaction controls for the Eclipse water style. These only take effect while §aWater Style§r is set to §aEclipse§r.
 option.ECLIPSE_WATER_WAVE_STRENGTH=Wave Strength
 option.ECLIPSE_WATER_WAVE_STRENGTH.comment=Overall intensity of the Eclipse wave normals (Eclipse WATER_WAVE_STRENGTH). Scales how strongly the surface bump bends lighting, reflections and refraction, and caps the vertex swell amplitude. §e[*]§r Only active in Eclipse water mode.
 option.ECLIPSE_WATER_WAVE_SPEED=Wave Speed
@@ -588,17 +584,19 @@ option.GR_BB=Blue to Blue
 option.GR_BC=Blue Curve
 
 option.WATER_STYLE_DEFINE=Water Style
-option.WATER_STYLE_DEFINE.comment=Determines the style of water. §e[*]§r "Set by Style" means that the setting will be automatically determined by the "Visual Style" setting in the main menu of Shader Options.
+option.WATER_STYLE_DEFINE.comment=Determines the style of water. §e[*]§r "Set by Style" means that the setting will be automatically determined by the "Visual Style" setting in the main menu of Shader Options. §e[*]§r §bEclipse§r switches to the ported Eclipse Shader water: it turns on the procedural physics waves AND the full Eclipse optical styling (per-channel absorption / deep-ocean colour, sharp sun specular, wave-crest foam, wave-geometry refraction, caustics and a world-anchored player wake) in one setting. Tune it in Eclipse Water Settings.
 value.WATER_STYLE_DEFINE.-1=Set by Style
 value.WATER_STYLE_DEFINE.1=Reimagined
 value.WATER_STYLE_DEFINE.2=Reimagined + Waves
 value.WATER_STYLE_DEFINE.3=Unbound
+value.WATER_STYLE_DEFINE.4=Eclipse
 
 option.WATER_CAUSTIC_STYLE_DEFINE=Water Caustic Style
 option.WATER_CAUSTIC_STYLE_DEFINE.comment=Determines the style of water shadows, also known as water caustics.
 value.WATER_CAUSTIC_STYLE_DEFINE.-1=Same as Water
 value.WATER_CAUSTIC_STYLE_DEFINE.1=Reimagined
 value.WATER_CAUSTIC_STYLE_DEFINE.3=Unbound
+value.WATER_CAUSTIC_STYLE_DEFINE.4=Eclipse
 
 option.WATER_REFRACTION_INTENSITY=Water Refraction Intensity §e[*]§r
 option.WATER_REFRACTION_INTENSITY.comment=Adjusts the intensity of water refraction and underwater distortion. §e[*]§r This setting only fully works when Detail Quality is set to "High", or else it will only affect the subtle underwater distortion.

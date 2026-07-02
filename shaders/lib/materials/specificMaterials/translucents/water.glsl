@@ -25,6 +25,14 @@
         vec3 colorPM = vec3(0.25);
         color.rgb = 0.375 * glColorM;
     #endif
+    #if ECLIPSE_WATER == 1
+        // Iteration 29: Eclipse naturalistic base water. A brighter tropical tint
+        // from the biome water colour; the per-channel absorption curve (Step 3
+        // surface tint + the underwater fog in common.glsl) does the deep-ocean
+        // darkening, rather than starting from the flat dark stylised base.
+        colorPM = pow2(colorP.rgb);
+        color.rgb = colorPM * glColorM * vec3(0.70, 0.95, 1.10);
+    #endif
 #else
     #if WATER_STYLE < 3
         color.rgb = mix(color.rgb, vec3(GetLuminance(color.rgb)), 0.88);
@@ -223,28 +231,18 @@
             eclipseBump += 0.6 * EclipseRipples(eclipseWorldPos.xz) * eclipseRippleFade * smoothstep(35.0, 10.0, lViewPos);
         }
 
-        // Iteration 27 -- procedural PLAYER WAKE. Eclipse's entity ripple system
-        // needs mod-only uniforms (waterEnteredPosition / waveSim2 ...) that read
-        // zero under Iris, so this instead adapts Eclipse's WATER_INTERACTION==1
-        // analytic ring using ONLY real uniforms (cameraPosition /
-        // previousCameraPosition / frameTimeCounter) -- no fake uniforms, no
-        // buffers. Concentric ripples emanate from the player's water-plane
-        // position, gated by camera motion, so swimming or walking through water
-        // disturbs the surface around the player in real time.
+        // Iteration 29 -- WORLD-ANCHORED TRAILING WAKE. Eclipse's entity ripple
+        // system needs mod-only uniforms (waterEnteredPosition / waveSim2 ...)
+        // that read zero under Iris, so the wake is generated procedurally from
+        // real uniforms only. EclipseWorldWake anchors expanding rings to fixed
+        // world-grid cells around the player (not the player itself), so the
+        // crests stay locked in world space and fade as the player moves on -- a
+        // trailing wake, not a rigid player-centred ring. Horizontal water faces
+        // near the player's altitude only.
         #if ECLIPSE_WATER_INTERACTION == 1
-            if (abs(worldGeoNormal.y) > 0.5) {
-                vec2 eclipseToSurf = eclipseWorldPos.xz - cameraPosition.xz;
-                float eclipseWakeDist = length(eclipseToSurf);
-                float eclipseMove = length((cameraPosition - previousCameraPosition).xz);
-                float eclipseWakeAmp = smoothstep(0.004, 0.06, eclipseMove)          // moving
-                                     * smoothstep(2.5, 0.0, abs(eclipseWorldPos.y - cameraPosition.y)) // near surface
-                                     * smoothstep(4.0, 0.0, eclipseWakeDist)         // near the player
-                                     * ECLIPSE_WATER_WAKE_STRENGTH;
-                if (eclipseWakeAmp > 0.001 && eclipseWakeDist > 0.05) {
-                    float eclipsePhase = eclipseWakeDist * 6.0 - frameTimeCounter * 5.0;
-                    vec2 eclipseWakeDir = eclipseToSurf / eclipseWakeDist;
-                    eclipseBump.xy += eclipseWakeDir * cos(eclipsePhase) * eclipseWakeAmp * 0.35;
-                }
+            if (abs(worldGeoNormal.y) > 0.5 && abs(eclipseWorldPos.y - cameraPosition.y) < 2.5) {
+                eclipseBump.xy += EclipseWorldWake(eclipseWorldPos.xz, cameraPosition, previousCameraPosition)
+                                * ECLIPSE_WATER_WAKE_STRENGTH * 0.15;
             }
         #endif
 
@@ -373,6 +371,20 @@
                 }
             #endif
             ////
+
+            // Iteration 29: Eclipse wave-crest foam. Whitecaps accumulate on the
+            // tops of the swell -- a cheap re-sample of the Eclipse heightmap at
+            // this surface point, thresholded so only crests foam. Self-contained
+            // (worldPos + eclipse_water.glsl), on top of RV's shoreline foam.
+            #if ECLIPSE_WATER == 1 && defined GBUFFERS_WATER
+                if (NdotU > 0.99) {
+                    float eclipseCrestLW = EclipseLargeWavesCurved(EclipseLargeWaves(worldPos.xz));
+                    float eclipseCrest = EclipseWaterHeightmap(worldPos.xz, eclipseCrestLW);
+                    float eclipseFoam = smoothstep(0.60, 0.86, eclipseCrest) * (0.35 + 0.25 * lmCoordM.y);
+                    color.rgb = mix(color.rgb, vec3(0.9, 0.95, 1.05), eclipseFoam * 0.5);
+                    reflectMult *= 1.0 - 0.5 * eclipseFoam;
+                }
+            #endif
         } else { // Underwater
             noDirectionalShading = true;
 

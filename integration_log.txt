@@ -1957,3 +1957,80 @@ VERIFICATION (Iteration 28)
    - ECLIPSE_WATER == 0 branch identical to pre-Iteration-27 line               : PASS
    - all Iteration 27 optics/interaction/menu code unchanged                    : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 29: Eclipse as Native Water Style 4, World-Anchored
+Trailing Wake, and Full Surface Material Override
+=======================================================================
+1) NATIVE MENU INTEGRATION (no floating buttons).
+   - The standalone ECLIPSE_WATER on/off toggle is GONE. Eclipse is now a value
+     of RV's own Water Style option: WATER_STYLE_DEFINE array -1 1 2 3 -> -1 1 2
+     3 4, with value.WATER_STYLE_DEFINE.4 = "Eclipse". Water Caustic Style gains
+     the matching value 4 = "Eclipse" (and "Same as Water" resolves to it when
+     the base style is Eclipse).
+   - The internal flag every Eclipse block gates on is now DERIVED in common.glsl
+     right after WATER_STYLE resolves:  #if WATER_STYLE == 4 -> #define ECLIPSE_WATER
+     1  #else 0. So selecting "Eclipse" turns on the physics waves AND the full
+     optical styling in ONE setting, and WATER_STYLE == 4 also satisfies RV's own
+     WATER_STYLE >= 2 / >= 3 quality gates so the base pipeline (tbnMatrix, normal
+     maps, alpha) is active underneath the Eclipse overrides.
+   - The Eclipse tuning sliders stay in the organised [ECLIPSE_WATER_SETTINGS] +
+     [ECLIPSE_WATER_OPTICS] sub-screens (native nested-screen pattern, not
+     orphaned). WATER_SETTINGS re-balanced to an even grid after removing the
+     toggle. Scope-checked: WATER_STYLE == 4 leaves no branch variable undefined
+     (normalMed/normalSmall are declared under >= 2; the == 3 specular path is
+     simply skipped and the Eclipse specular override runs instead).
+
+2) DYNAMIC RIPPLE PROPAGATION -- world-anchored trailing wake
+   (eclipse_water.glsl EclipseWorldWake). The Iteration 27 wake re-centred one
+   ring on the player every frame, so it slid rigidly. Replaced with concentric
+   rings anchored to a fixed 3x3 neighbourhood of WORLD-GRID cells around the
+   player; each cell's crests are a function of world position and ABSOLUTE time
+   (phase = worldDist*freq - frameTimeCounter*speed), so they are locked to world
+   space and expand outward over time -- they do NOT translate with the player. A
+   cell only radiates while the player is near it (the time-attenuated distance
+   decay), so as the player moves the cells behind fade and cells ahead light up:
+   a true trailing, fading wake. Uses ONLY real uniforms (cameraPosition /
+   previousCameraPosition / frameTimeCounter), no buffers, no Eclipse-mod
+   uniforms. HONEST LIMIT: rings that persist and keep expanding forever after
+   the player leaves would need per-emission history (a feedback buffer); this is
+   the closest buffer-free approximation and reads as a fading world-locked wake.
+
+3) FULL SURFACE MATERIAL OVERRIDE (all gated ECLIPSE_WATER == 1, i.e. Style 4).
+   - Base colour (water.glsl Step 1): a naturalistic tropical base
+     (colorP^2 * glColorM * vec3(0.70,0.95,1.10)) replaces RV's flat dark
+     style-3 base; depth darkening is done by the absorption curve, not a dark
+     base.
+   - Clarity / deep-ocean colour (Step 3): per-channel Beer-Lambert absorption
+     mixed in by RV's waterFog view-depth term (Iteration 27), plus the
+     underwater fog colour override in common.glsl.
+   - Sun specular (Step 4, Iteration 27): near-mirror smoothness + sharpened
+     fresnel-weighted glint via RV's smoothnessG / highlightMult.
+   - Wave-crest FOAM (Step 3, new): whitecaps where the Eclipse heightmap crests,
+     on top of RV's shoreline foam.
+   - Fresnel reflections: RV's SSR already consumes the Eclipse wave normal
+     (Iteration 25), so bounces distort across the waves without rewriting the
+     reflection path.
+   NOTE: RV and Eclipse differ in tonemap/sky/reflection engines, so this maps
+   Eclipse's colour palette, absorption curve, specular character and foam onto
+   RV's structurally-sound machinery rather than being a literal pixel match.
+
+4) COMPILE / SCOPE SAFETY.
+   - All new variables are typed and inside function bodies (water.glsl in main(),
+     EclipseWorldWake a module function). The only common.glsl global-scope
+     additions are #define macros and the typed waterFogColor initializer fixed
+     in Iteration 28 -- no global bare assignments.
+   - Gating: any Water Style other than Eclipse leaves ECLIPSE_WATER == 0, a
+     byte-identical fallback to the Iteration 22 cloud/sun baseline.
+
+VERIFICATION (Iteration 29)
+   - WATER_STYLE_DEFINE / caustic arrays include 4; lang labels present          : PASS
+   - ECLIPSE_WATER derived from WATER_STYLE==4, defined before first use          : PASS
+   - no standalone ECLIPSE_WATER token/option/lang orphan remains                 : PASS
+   - wake is world-anchored (crests decoupled from player), real uniforms only    : PASS
+   - base colour / clarity / specular / crest foam all gated + scope-safe         : PASS
+   - #if/#endif + brace balance on every touched file; no float in #if            : PASS
+   - subscreens valid, WATER_SETTINGS even grid                                   : PASS
+   - Water Style != Eclipse -> byte-identical fallback                           : PASS
+=======================================================================
