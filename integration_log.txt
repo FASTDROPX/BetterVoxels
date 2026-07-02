@@ -1762,3 +1762,68 @@ takeover), lib/materials/materialMethods/refraction.glsl (wave-slope
 refraction), program/shadow.glsl (Eclipse caustics), shaders.properties
 (screens + sliders), lang/en_US.lang (labels/tooltips).
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 26: Eclipse Water Fish-Scale Fix (Noise Bridge + Stable
+Normals + Clamped Parallax) and Menu Layout Cleanup
+=======================================================================
+SYMPTOM 1 -- water shattered into tiny pixelated "fish scales" with a radial
+smear toward the view center (screenshot). SYMPTOM 2 -- water settings menu
+looked crowded / misaligned.
+
+ROOT CAUSE 1 (fish scales). eclipse_water.glsl sampled RV's noisetex directly
+(texture2D(noisetex, ...).b/.r). Eclipse authored its waves against its own
+512x512 SMOOTH value-noise noises.png; RV's 128x128 noisetex is NOT smooth
+value noise, so the heightmap finite differences read per-texel garbage and the
+analytical normals faceted. This is the SAME mismatch the Bliss cloud port hit
+(and solved with a procedural noise bridge). Two secondary faults amplified it:
+  (a) the normal reconstruction used z = 1 - pow(|xDelta+yDelta|, 2), which
+      goes NEGATIVE on any steep gradient and flips the normal inside-out ->
+      hard facets; and
+  (b) getParallaxDisplacement used viewVector.xy / -viewVector.z, which
+      explodes as viewVector.z -> 0 at grazing angles -> the radial UV smear.
+
+FIX 1. Rewrote eclipse_water.glsl to be texture-free:
+  - NOISE BRIDGE: a procedural quintic value noise (eclipse_vnoise2, same
+    technique as bliss_clouds.glsl) calibrated to Eclipse's ~1.9-block base
+    feature (ECLIPSE_NOISE_RES = 512/20). eclipseNoiseB/eclipseNoiseR replace
+    every .b/.r tap in the heightmap, normals, caustics, vertex swell and
+    refraction gradient. noisetex is no longer touched by the wave field, so the
+    field is C1-smooth and the gradients are gentle.
+  - STABLE NORMALS: both wave-normal reconstructions now return
+    normalize(vec3(xDelta, yDelta, 1.0)) -- z pinned positive, can never flip.
+    A deltaPos = max(deltaPos, 0.25) guard keeps the finite difference well
+    sampled.
+  - CLAMPED PARALLAX: the tangent parallax is offset by
+    clamp(viewVector.xy / (-viewVector.z - 0.35), -1.5, 1.5) * waterHeight, so
+    it stays a sub-block depth cue and can never tear at grazing angles.
+  - TAMED DISPLACEMENT: the vertex swell (gbuffers_water.vsh) and its normal
+    fold (water.glsl) had their distance range capped 4.0 -> 1.5 and were made
+    near zero-mean ((wave - 0.35) * 0.35), so the surface bobs within a
+    fraction of a block instead of sinking ~0.5 block / poking up ~2 blocks.
+  Behaviour, clock (blissCloudSyncedTime), and all public function signatures
+  are unchanged, so the water.glsl / refraction.glsl / shadow.glsl call sites
+  and the Iteration 25 voxel-lighting/SSR splice are untouched.
+
+ROOT CAUSE 2 (menu). shaders.properties was structurally valid (verified: no
+dangling [subscreen] refs, all 8 ECLIPSE_* options carry value-lists), but the
+Iteration 25 WATER_SETTINGS grew to 20 items (a 10-row 2-column screen) and the
+new ECLIPSE_WATER_SETTINGS had an odd 11 items, which crowded / misaligned the
+grid.
+
+FIX 2. Trimmed the spacer row so WATER_SETTINGS is 18 items (9 clean rows) with
+ECLIPSE_WATER + [ECLIPSE_WATER_SETTINGS] sitting right after the water-style
+selectors, and padded ECLIPSE_WATER_SETTINGS to an even 12 items. No option or
+lang change.
+
+VERIFICATION (Iteration 26)
+   - module is texture-free procedural noise -> no per-texel facets           : PASS
+   - normal z pinned positive -> cannot flip inside-out                        : PASS
+   - parallax clamped -> no grazing-angle radial smear                         : PASS
+   - vertex swell near zero-mean, range-capped -> no sink/spike                : PASS
+   - public signatures unchanged -> Iteration 25 splice intact                 : PASS
+   - module 130- and 430-safe (no textures/SSBO/new uniforms)                  : PASS
+   - shaders.properties: no dangling refs, even grids, all value-lists         : PASS
+   - ECLIPSE_WATER=0 still byte-identical to the Iteration 24 build            : PASS
+=======================================================================

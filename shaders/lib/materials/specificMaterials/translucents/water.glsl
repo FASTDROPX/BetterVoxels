@@ -227,9 +227,9 @@
         // morphing geometry (Eclipse feeds its displaced vertex normal into
         // the TBN base; on the water plane this additive fold is equivalent).
         #if ECLIPSE_WAVE_DISPLACEMENT > 0
-            float eclipseRange = min(1.0 + pow2(length(playerPos) / 256.0), 4.0);
+            float eclipseRange = min(1.0 + pow2(length(playerPos) / 256.0), 1.5);
             vec3 eclipseLargeNormal = EclipseLargeWaveNormal(eclipseWorldPos, eclipseRange);
-            eclipseBump.xy += eclipseLargeNormal.xy * ECLIPSE_WAVE_DISPLACEMENT_M;
+            eclipseBump.xy += eclipseLargeNormal.xy * 0.5 * ECLIPSE_WAVE_DISPLACEMENT_M;
         #endif
 
         eclipseBump = normalize(eclipseBump);

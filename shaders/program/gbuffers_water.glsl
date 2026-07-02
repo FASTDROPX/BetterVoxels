@@ -382,8 +382,13 @@ void main() {
     #if ECLIPSE_WATER == 1 && ECLIPSE_WAVE_DISPLACEMENT > 0
         if (mat == 32000) {
             vec3 eclipseWorldPosV = position.xyz + cameraPosition;
-            float eclipseRangeV = min(1.0 + pow2(length(position.xyz) / 256.0), 4.0);
-            position.y += (EclipseVertexWave(eclipseWorldPosV, eclipseRangeV) * 0.6 - 0.5) * ECLIPSE_WAVE_DISPLACEMENT_M;
+            // Range grows mildly with distance for a rolling far field, capped
+            // low so the near surface bobs within a fraction of a block (and
+            // stays inside its source water voxel). Zero-mean so the water
+            // plane is not lowered (no shoreline gaps).
+            float eclipseRangeV = min(1.0 + pow2(length(position.xyz) / 256.0), 1.5);
+            float eclipseSwell = (EclipseVertexWave(eclipseWorldPosV, eclipseRangeV) - 0.35) * 0.35;
+            position.y += eclipseSwell * ECLIPSE_WAVE_DISPLACEMENT_M;
         }
     #endif
 

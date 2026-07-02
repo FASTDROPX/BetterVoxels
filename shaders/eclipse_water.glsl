@@ -1,53 +1,67 @@
 // =============================================================================
-//  ECLIPSE WATER MODULE  (Iteration 25: "Hydro-Voxel Fusion")
+//  ECLIPSE WATER MODULE  (Iteration 25 / hardened in Iteration 26)
 // -----------------------------------------------------------------------------
 //  Standalone port of the Eclipse Shader's native water wave engine
-//  (github.com/Merlin1809/Eclipse-Shader, branch Unstable) into the
-//  Rethinking Voxels pipeline. Source material, traced line-by-line:
-//    - shaders/lib/waterBump.glsl  : 3-octave golden-angle-rotated fBm
-//      heightmap (getWaterHeightmap), analytical finite-difference wave
-//      normals (getWaveNormal) and the exponential caustic field
-//      (waterCaustics), all modulated by a 600-block "patchy" swell mask.
-//    - shaders/dimensions/all_translucent.vsh : the LARGE_WAVE_DISPLACEMENT
-//      vertex swell (getWave / vertex getWaveNormal) that physically morphs
-//      the water mesh.
-//    - shaders/dimensions/all_translucent.fsh : the parallax displacement
-//      of the sampling plane (getParallaxDisplacement) and the flowing-face
-//      UV mapping.
-//    - shaders/lib/ripples.glsl : rain-drop ripple normals (Shadertoy
-//      ldfyzl port by Zavie/Ctrl-Alt-Test, public production use).
-//  NOT ported: shaders/lib/oceans.glsl -- that file is the Physics Mod
-//  integration stub (public-domain afl_ext Gerstner waves); every uniform in
-//  it (physics_waviness, physics_gameTime, ...) is injected by the external
-//  Physics Mod at runtime and does not exist under plain Iris, so it cannot
-//  run inside a self-contained pack.
+//  (github.com/Merlin1809/Eclipse-Shader, branch Unstable) into Rethinking
+//  Voxels. Source, traced line-by-line: lib/waterBump.glsl (3-octave
+//  golden-angle-rotated fBm heightmap, analytical finite-difference normals,
+//  exponential caustics, 600-block "patchy" swell mask), all_translucent.vsh
+//  (LARGE_WAVE_DISPLACEMENT vertex swell), all_translucent.fsh (parallax +
+//  flowing-face UV mapping) and lib/ripples.glsl (rain ripples). Eclipse's
+//  lib/oceans.glsl was intentionally NOT ported -- it is the Physics Mod stub
+//  whose physics_* uniforms only exist with that external mod.
 //
-//  RV integration rules honoured by this module:
-//    - VERSION SAFETY: pure ALU + noisetex taps. No SSBOs, no image ops, no
-//      new uniforms, no new buffers -- compiles identically under
-//      "#version 130" (composite) and "#version 430 compatibility"
-//      (gbuffers_water / shadow). bufferObject.0 and every RV binding are
-//      untouched by construction.
-//    - NOISE BRIDGE: Eclipse samples its own 512x512 Bliss noisetex; RV ships
-//      a 128x128 RGB noisetex. UV math is resolution-independent (wave tile
-//      periods are in blocks), so the same channels are used (.b smooth fBm
-//      for the heightmap/caustics/mask, .r for the vertex swell) -- only the
-//      per-tile texel density differs.
-//    - TIME BASE: all advection runs on eclipseWaterTimeG, derived from
-//      blissCloudSyncedTime (lib/common.glsl) instead of frameTimeCounter.
-//      In steady state that clock advances at ~1.0/s exactly like
-//      frameTimeCounter, so wave speeds match Eclipse; during an
-//      ECLIPSE_TIME_ACTIVE cinematic time transition it rides the eased
-//      visual clock, so the water executes the same time-lapse warp as the
-//      sun, clouds and cloud shadows (Iterations 22-24).
-//    - NAMESPACE: every symbol is "eclipse"-prefixed; verified collision-free
-//      against the whole RV tree.
-//  All functions are declared at global scope: include this file only from
-//  the top level of a program (gbuffers_water, composite, shadow), never
-//  from inside main().
+//  Iteration 26 -- NOISE BRIDGE (the fish-scale fix). Eclipse sampled its own
+//  512x512 SMOOTH-value noises.png. RV ships a 128x128 noisetex whose content
+//  is NOT smooth value noise, so feeding Eclipse's heightmap/normal finite
+//  differences from raw noisetex taps produced per-texel garbage -> the water
+//  shattered into "fish scales". This module now generates its wave field from
+//  a PROCEDURAL quintic value noise (the same technique the Bliss cloud port
+//  uses, lib/atmospherics/clouds/bliss_clouds.glsl) calibrated to Eclipse's
+//  ~1.9-block base feature size, so the heightmap is C1-smooth and the normals
+//  are gentle. Normal reconstruction was also made unconditionally stable
+//  (z pinned positive, so it can never flip inside-out) and the tangent-space
+//  parallax is clamped so it can no longer explode at grazing angles (that was
+//  the radial smear). noisetex is no longer touched by the wave field.
+//
+//  RV integration rules: pure ALU (no texture wave taps, no SSBOs, no image
+//  ops, no new uniforms/buffers) -> compiles under #version 130 (composite)
+//  and 430 compatibility (gbuffers_water / shadow); bufferObject.0 and every
+//  RV binding untouched. All advection runs on eclipseWaterTimeG, derived from
+//  blissCloudSyncedTime (lib/common.glsl), so the waves fast-forward with the
+//  sun/clouds during an ECLIPSE_TIME_ACTIVE transition and otherwise drift at
+//  the normal rate. Every symbol is "eclipse/Eclipse"-prefixed and verified
+//  collision-free. Include only from the top level of a program.
 // =============================================================================
 #ifndef INCLUDE_ECLIPSE_WATER
 #define INCLUDE_ECLIPSE_WATER
+
+// ---- Procedural smooth value noise (noise bridge) --------------------------
+// Calibrated so one noise cell ~= Eclipse's noises.png correlation length
+// (~20 texels of a 512 tile) -> ECLIPSE_NOISE_RES cells per input unit.
+#define ECLIPSE_NOISE_RES (512.0 / 20.0)
+
+float eclipse_hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Smooth (quintic) 2D value noise in [0,1], mean ~0.5.
+float eclipse_vnoise2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = eclipse_hash12(i);
+    float b = eclipse_hash12(i + vec2(1.0, 0.0));
+    float c = eclipse_hash12(i + vec2(0.0, 1.0));
+    float d = eclipse_hash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Drop-in stand-ins for Eclipse's noisetex .b / .r channel taps.
+float eclipseNoiseB(vec2 c) { return eclipse_vnoise2(c * ECLIPSE_NOISE_RES); }
+float eclipseNoiseR(vec2 c) { return eclipse_vnoise2(c * ECLIPSE_NOISE_RES + 3.1); }
 
 // Eclipse waterBump.glsl: anisotropic octave tile sizes, in blocks.
 const vec2 eclipseWaveSizes[3] = vec2[](
@@ -70,7 +84,7 @@ mat2 EclipseRotationMatrix() {
 
 // 600-block swell mask: decides where the sea is calm vs. cresting.
 float EclipseLargeWaves(vec2 posxz) {
-    return texture2D(noisetex, posxz / 600.0).b;
+    return eclipseNoiseB(posxz / 600.0);
 }
 
 float EclipseLargeWavesCurved(float largeWaves) {
@@ -78,7 +92,7 @@ float EclipseLargeWavesCurved(float largeWaves) {
     return mix(1.0 - curved, curved, ECLIPSE_PATCHY_WAVE_BLEND);
 }
 
-// Eclipse getWaterHeightmap: 3 rotated, drifting fBm octaves.
+// Eclipse getWaterHeightmap: 3 rotated, drifting smooth-noise octaves.
 float EclipseWaterHeightmap(vec2 posxz, float largeWavesCurved) {
     vec2 pos = posxz;
     float movement = eclipseWaterTimeG * 0.035;
@@ -87,26 +101,28 @@ float EclipseWaterHeightmap(vec2 posxz, float largeWavesCurved) {
     float heightSum = 0.0;
     for (int i = 0; i < 3; i++) {
         pos = rotationMatrix * pos;
-        heightSum += texture2D(noisetex, pos / eclipseWaveSizes[i] + largeWavesCurved * 0.5 + movement).b;
+        heightSum += eclipseNoiseB(pos / eclipseWaveSizes[i] + largeWavesCurved * 0.5 + movement);
     }
 
     return (heightSum / 4.5) * max(largeWavesCurved, 0.3);
 }
 
-// Eclipse getWaveNormal: analytical finite-difference normal of the heightmap,
-// in heightmap tangent space (x = d/dx, y = d/dz, z = up). The sampling radius
-// blends between the A (calm) and B (crest) radii and widens with distance so
-// the far field never gets more detail than it has pixels.
+// Eclipse getWaveNormal, made unconditionally stable: analytical finite-
+// difference gradient of the smooth heightmap, z pinned to +1 so the normal
+// tilts gently and can NEVER flip inside-out (the old 1-pow(|x+y|,2) form went
+// negative on any steep gradient -> faceting). Returned in bump space
+// (x=d/dx, y=d/dz, z=up-along-geometric-normal).
 vec3 EclipseWaveNormal(vec2 posxz, vec3 relPos) {
     float largeWaves = EclipseLargeWaves(posxz);
     float largeWavesCurved = EclipseLargeWavesCurved(largeWaves);
 
     #if ECLIPSE_HYPER_DETAILED_WAVES == 1
-        float deltaPos = 0.025;
+        float deltaPos = 0.35;
     #else
         float deltaPos = mix(ECLIPSE_WAVES_A_RADIUS, ECLIPSE_WAVES_B_RADIUS, largeWavesCurved);
         deltaPos += min(length(relPos) / (16.0 * 24.0), 3.0);
     #endif
+    deltaPos = max(deltaPos, 0.25); // guard: keep the difference well-sampled
 
     float h0 = EclipseWaterHeightmap(posxz, largeWavesCurved);
     float h1 = EclipseWaterHeightmap(posxz + vec2(deltaPos, 0.0), largeWavesCurved);
@@ -115,12 +131,14 @@ vec3 EclipseWaveNormal(vec2 posxz, vec3 relPos) {
     float xDelta = (h1 - h0) / deltaPos;
     float yDelta = (h3 - h0) / deltaPos;
 
-    return normalize(vec3(xDelta, yDelta, 1.0 - pow(abs(xDelta + yDelta), 2.0)));
+    return normalize(vec3(xDelta, yDelta, 1.0));
 }
 
-// Eclipse getParallaxDisplacement: slides the sampling plane along the
-// tangent-space view vector by the local wave height, so crests visually
-// occlude troughs even at grazing angles.
+// Eclipse getParallaxDisplacement, clamped: slides the sampling plane along the
+// tangent-space view vector by the local wave height. The raw ratio explodes
+// as tanViewVector.z -> 0 (grazing angles), which was the radial smear; the
+// offset is now clamped to a fraction of a block so parallax stays a subtle
+// depth cue and can never tear.
 vec2 EclipseParallax(vec2 posxz, vec3 tanViewVector) {
     float largeWaves = EclipseLargeWaves(posxz);
     float largeWavesCurved = EclipseLargeWavesCurved(largeWaves);
@@ -128,23 +146,24 @@ vec2 EclipseParallax(vec2 posxz, vec3 tanViewVector) {
     float waterHeight = EclipseWaterHeightmap(posxz, largeWavesCurved);
     waterHeight = exp(-7.0 * exp(-7.0 * waterHeight)) * 0.25;
 
-    return posxz + (tanViewVector.xy / -tanViewVector.z) * waterHeight;
+    vec2 parallax = tanViewVector.xy / (-tanViewVector.z - 0.35);
+    parallax = clamp(parallax, vec2(-1.5), vec2(1.5));
+
+    return posxz + parallax * waterHeight;
 }
 
-// Eclipse all_translucent.vsh getWave: the low-frequency swell that physically
-// displaces water vertices ("crest formation"). Range grows with distance so
-// the far ocean rolls; the voxel-lit near field stays within a fraction of a
-// block, which keeps displaced surfaces inside their source water voxel.
+// Eclipse all_translucent.vsh getWave: low-frequency swell that physically
+// displaces water vertices. Now on smooth procedural noise so the mesh rolls
+// instead of spiking. Range grows with distance (capped in the caller).
 float EclipseVertexWave(vec3 worldPos, float range) {
-    return pow(1.0 - texture2D(noisetex, (worldPos.xz + eclipseWaterTimeG) / 125.0).r, 5.0)
-           * min(ECLIPSE_WATER_WAVE_STRENGTH, 1.0) * range;
+    float n = eclipseNoiseR((worldPos.xz + eclipseWaterTimeG) / 125.0);
+    return pow(1.0 - n, 5.0) * min(ECLIPSE_WATER_WAVE_STRENGTH, 1.0) * range;
 }
 
-// Eclipse all_translucent.vsh getWaveNormal: matching analytic normal of the
-// vertex swell, folded into the shading normal so lighting follows the
-// morphing geometry.
+// Matching analytic normal of the vertex swell, stable (z pinned positive),
+// folded into the shading normal so lighting follows the morphing geometry.
 vec3 EclipseLargeWaveNormal(vec3 worldPos, float range) {
-    float deltaPos = 0.5;
+    const float deltaPos = 0.5;
 
     float h0 = EclipseVertexWave(worldPos, range);
     float h1 = EclipseVertexWave(worldPos - vec3(deltaPos, 0.0, 0.0), range);
@@ -153,33 +172,32 @@ vec3 EclipseLargeWaveNormal(vec3 worldPos, float range) {
     float xDelta = (h1 - h0) / deltaPos * 1.5;
     float yDelta = (h3 - h0) / deltaPos * 1.5;
 
-    return normalize(vec3(xDelta, yDelta, 1.0 - pow(abs(xDelta + yDelta), 2.0)));
+    return normalize(vec3(xDelta, yDelta, 1.0));
 }
 
-// Eclipse waterCaustics: exponential response of the folded wave field. Used
-// by the shadow pass so sunlight entering the water medium projects the SAME
-// wave geometry onto the floor that the surface renders above it.
+// Eclipse waterCaustics: exponential response of the folded smooth wave field,
+// so sunlight entering the medium projects the SAME wave geometry the surface
+// renders. Advected by the visual clock.
 float EclipseWaterCaustics(vec3 worldPos) {
     vec2 pos = worldPos.xz;
     float movement = eclipseWaterTimeG * 0.035;
     mat2 rotationMatrix = EclipseRotationMatrix();
 
-    float largeWaves = texture2D(noisetex, pos / 600.0).b;
+    float largeWaves = eclipseNoiseB(pos / 600.0);
     float largeWavesCurved = EclipseLargeWavesCurved(largeWaves);
 
     float heightSum = 0.0;
     for (int i = 0; i < 3; i++) {
         pos = rotationMatrix * pos;
-        heightSum += pow(abs(abs(texture2D(noisetex, pos / eclipseWaveSizes[i] + largeWavesCurved * 0.5 + movement).b * 2.0 - 1.0) * 2.0 - 1.0), 1.0 + largeWavesCurved);
+        float n = eclipseNoiseB(pos / eclipseWaveSizes[i] + largeWavesCurved * 0.5 + movement);
+        heightSum += pow(abs(abs(n * 2.0 - 1.0) * 2.0 - 1.0), 1.0 + largeWavesCurved);
     }
 
     return exp((1.0 + 5.0 * sqrt(largeWavesCurved)) * (heightSum / 3.0 - 0.5));
 }
 
 // Wave-geometry gradient for the composite refraction pass: the screen-space
-// refraction offset follows the actual surface slope instead of generic
-// noise, so underwater voxel light and the absorption fog bend consistently
-// with the waves overhead.
+// refraction offset follows the actual surface slope instead of generic noise.
 vec2 EclipseRefractGradient(vec2 posxz) {
     float largeWaves = EclipseLargeWaves(posxz);
     float largeWavesCurved = EclipseLargeWavesCurved(largeWaves);
@@ -189,13 +207,12 @@ vec2 EclipseRefractGradient(vec2 posxz) {
     float h1 = EclipseWaterHeightmap(posxz + vec2(deltaPos, 0.0), largeWavesCurved);
     float h3 = EclipseWaterHeightmap(posxz + vec2(0.0, deltaPos), largeWavesCurved);
 
-    return vec2(h1 - h0, h3 - h0) / deltaPos;
+    return clamp(vec2(h1 - h0, h3 - h0) / deltaPos, vec2(-1.0), vec2(1.0));
 }
 
 // ---------------------------------------------------------------------------
 // Rain ripples (Eclipse lib/ripples.glsl, Shadertoy ldfyzl). Rain response is
-// real-time by nature, so this one effect stays on frameTimeCounter, exactly
-// like RV's own rain puddles.
+// real-time by nature, so this one effect stays on frameTimeCounter.
 // ---------------------------------------------------------------------------
 float EclipseHash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
