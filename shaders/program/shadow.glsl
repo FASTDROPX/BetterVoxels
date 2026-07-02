@@ -50,6 +50,11 @@ void DoNaturalShadowCalculation(inout vec4 color1, inout vec4 color2) {
     #include "/lib/materials/materialMethods/connectedGlass.glsl"
 #endif
 
+#if ECLIPSE_WATER == 1 && WATER_CAUSTIC_STYLE >= 3
+    // Iteration 25: Eclipse caustic field for the water shadow color.
+    #include "/eclipse_water.glsl"
+#endif
+
 //Program//
 void main() {
     if (passType == 0) {
@@ -102,20 +107,31 @@ void main() {
                                 color1.rgb = pow2(color1.rgb) * vec3(2.5, 3.0, 3.0) * 0.96;
                             #endif
                         #else
-                            #define WATER_SPEED_MULT_M WATER_SPEED_MULT * 0.035
-                            vec2 causticWind = vec2(frameTimeCounter * WATER_SPEED_MULT_M, 0.0);
-                            vec2 cPos1 = worldPos.xz * 0.10 - causticWind;
-                            vec2 cPos2 = worldPos.xz * 0.05 + causticWind;
+                            #if ECLIPSE_WATER == 1
+                                // Iteration 25: sunlight entering the water medium
+                                // projects the SAME Eclipse wave field the surface
+                                // renders (voxel caustics), advected by the smooth
+                                // visual clock. Output is shaped into RV's original
+                                // 0.35..1.0 shadowcolor band so downstream underwater
+                                // brightness stays calibrated.
+                                float caustic = EclipseWaterCaustics(worldPos);
+                                color1.rgb = vec3(min1(caustic * 0.6) * 0.65 + 0.35);
+                            #else
+                                #define WATER_SPEED_MULT_M WATER_SPEED_MULT * 0.035
+                                vec2 causticWind = vec2(frameTimeCounter * WATER_SPEED_MULT_M, 0.0);
+                                vec2 cPos1 = worldPos.xz * 0.10 - causticWind;
+                                vec2 cPos2 = worldPos.xz * 0.05 + causticWind;
 
-                            float cMult = 14.0;
-                            float offset = 0.001;
+                                float cMult = 14.0;
+                                float offset = 0.001;
 
-                            float caustic = 0.0;
-                            caustic += dot(texture2D(gaux4, cPos1 + vec2(offset, 0.0)).rg, vec2(cMult))
-                                    - dot(texture2D(gaux4, cPos1 - vec2(offset, 0.0)).rg, vec2(cMult));
-                            caustic += dot(texture2D(gaux4, cPos2 + vec2(0.0, offset)).rg, vec2(cMult))
-                                    - dot(texture2D(gaux4, cPos2 - vec2(0.0, offset)).rg, vec2(cMult));
-                            color1.rgb = vec3(max0(min1(caustic * 0.8 + 0.35)) * 0.65 + 0.35);
+                                float caustic = 0.0;
+                                caustic += dot(texture2D(gaux4, cPos1 + vec2(offset, 0.0)).rg, vec2(cMult))
+                                        - dot(texture2D(gaux4, cPos1 - vec2(offset, 0.0)).rg, vec2(cMult));
+                                caustic += dot(texture2D(gaux4, cPos2 + vec2(0.0, offset)).rg, vec2(cMult))
+                                        - dot(texture2D(gaux4, cPos2 - vec2(0.0, offset)).rg, vec2(cMult));
+                                color1.rgb = vec3(max0(min1(caustic * 0.8 + 0.35)) * 0.65 + 0.35);
+                            #endif
 
                             #if MC_VERSION < 11300
                                 color1.rgb *= vec3(0.3, 0.45, 0.9);

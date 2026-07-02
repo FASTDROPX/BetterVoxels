@@ -191,6 +191,60 @@
             fresnel = clamp(1.0 + dot(normalM, nViewPos), 0.0, 1.0);
         #endif
     #endif
+
+    // ========== Iteration 25: Eclipse water surface takeover ("Hydro-Voxel Fusion") ========== //
+    // Replaces the bump computed above with Eclipse's analytical wave normals
+    // (/eclipse_water.glsl), built from the SAME heightmap field that morphs
+    // the vertices. Everything downstream reads normalM, so the splice is
+    // structural: DoLighting warps the colored voxel light across the crests,
+    // GetReflection's reflect vector shatters SSR bounces on the moving
+    // surface, and the fresnel refresh keeps opacity consistent. Not compiled
+    // for DH water (far-field keeps the stock look) or when ECLIPSE_WATER=0.
+    #if ECLIPSE_WATER == 1 && defined GBUFFERS_WATER
+    {
+        vec3 eclipseWorldPos = playerPos + cameraPosition;
+
+        // Eclipse flowing-face mapping: project the sampling plane along the
+        // dominant axis of the geometric normal so waterfalls animate too.
+        vec3 eclipseFlowDir = worldGeoNormal * eclipseWaterTimeG * 2.0;
+        vec2 eclipseUV = eclipseWorldPos.xy + abs(eclipseFlowDir.xz);
+        eclipseUV = mix(eclipseUV, eclipseWorldPos.zy + abs(eclipseFlowDir.zx), clamp(abs(worldGeoNormal.x), 0.0, 1.0));
+        eclipseUV = mix(eclipseUV, eclipseWorldPos.xz, clamp(abs(worldGeoNormal.y), 0.0, 1.0));
+
+        // Wave-height parallax of the sampling plane (Eclipse getParallaxDisplacement).
+        eclipseUV = EclipseParallax(eclipseUV, viewVector);
+
+        vec3 eclipseBump = EclipseWaveNormal(eclipseUV, playerPos);
+
+        // Rain-drop ripple normals (Eclipse lib/ripples.glsl), horizontal
+        // faces near the camera only, faded by sky access like RV's puddles.
+        if (lViewPos < 35.0 && rainFactor > 0.0 && abs(worldGeoNormal.y) > 0.5) {
+            float eclipseRippleFade = smoothstep(0.85, 1.0, lmCoordM.y) * rainFactor;
+            eclipseBump += 0.6 * EclipseRipples(eclipseWorldPos.xz) * eclipseRippleFade * smoothstep(35.0, 10.0, lViewPos);
+        }
+
+        // Fold in the vertex-swell gradient so the shading normal follows the
+        // morphing geometry (Eclipse feeds its displaced vertex normal into
+        // the TBN base; on the water plane this additive fold is equivalent).
+        #if ECLIPSE_WAVE_DISPLACEMENT > 0
+            float eclipseRange = min(1.0 + pow2(length(playerPos) / 256.0), 4.0);
+            vec3 eclipseLargeNormal = EclipseLargeWaveNormal(eclipseWorldPos, eclipseRange);
+            eclipseBump.xy += eclipseLargeNormal.xy * ECLIPSE_WAVE_DISPLACEMENT_M;
+        #endif
+
+        eclipseBump = normalize(eclipseBump);
+        float eclipseBumpMult = ECLIPSE_WATER_WAVE_STRENGTH;
+        eclipseBump = eclipseBump * vec3(eclipseBumpMult) + vec3(0.0, 0.0, 1.0 - eclipseBumpMult);
+
+        normalM = clamp(normalize(eclipseBump * tbnMatrix), vec3(-1.0), vec3(1.0));
+
+        // Same inward-normal guard + fresnel refresh RV applies to its own bump.
+        vec3 eclipseRefVec = reflect(nViewPos, normalize(normalM));
+        float eclipseNorMix = pow2(pow2(pow2(1.0 - max0(dot(normal, eclipseRefVec))))) * 0.5;
+        normalM = mix(normalM, normal, eclipseNorMix);
+        fresnel = clamp(1.0 + dot(normalM, nViewPos), 0.0, 1.0);
+    }
+    #endif
     // ============================== End of Step 2 ============================== //
 
     // ============================== Step 3: Water Material Features ============================== //

@@ -430,6 +430,29 @@ option.TIME_TRANSITION_SPEED=Time Transition Speed
 option.TIME_TRANSITION_SPEED.comment=How long (in seconds) the Eclipse time-transition glide takes when the world time jumps. §e[*]§r This is now a LIVE control: the pack keeps seven engine-smoothed speed tiers (0.4 / 0.8 / 1.2 / 2.0 / 3.0 / 5.0 / 10.0 s) and the shader picks the tier nearest your setting, so higher values give a slower, more cinematic glide and lower values a quick catch-up. §e[*]§r 0.0 = OFF (Instant): easing is skipped and time snaps like vanilla. §e[*]§r Only has any effect while §aEclipse Time Transition§r is enabled.
 value.TIME_TRANSITION_SPEED.0.0=OFF (Instant)
 
+option.ECLIPSE_WATER=Water Physics Style
+option.ECLIPSE_WATER.comment=Selects the water rendering pipeline. §e[*]§r RV / Complementary: the stock Rethinking Voxels water, byte-identical to the previous build. §e[*]§r Eclipse Physics & Waves: injects the complete procedural wave engine ported from the Eclipse Shader -- physical vertex crest/trough deformation, 3-octave rotated-fBm analytical wave normals with wave-height parallax and rain-drop ripples, tailored wave-slope refraction, and Eclipse caustics (needs Water Caustic Style: Fancy). The morphing surface positions are streamed straight into RV's voxel light sampling and the wave normals into the SSR reflect vectors, so colored voxel light and reflections warp across the moving waves in real time. §e[*]§r In Eclipse mode the wave surface replaces the RV/interactive-water surface normals. Configure it in Eclipse Water Settings.
+value.ECLIPSE_WATER.0=RV / Complementary
+value.ECLIPSE_WATER.1=Eclipse Physics & Waves
+screen.ECLIPSE_WATER_SETTINGS=Eclipse Water Settings
+screen.ECLIPSE_WATER_SETTINGS.comment=Wave physics controls for the Eclipse water mode. These only take effect while §aWater Physics Style§r is set to §aEclipse Physics & Waves§r.
+option.ECLIPSE_WATER_WAVE_STRENGTH=Wave Strength
+option.ECLIPSE_WATER_WAVE_STRENGTH.comment=Overall intensity of the Eclipse wave normals (Eclipse WATER_WAVE_STRENGTH). Scales how strongly the surface bump bends lighting, reflections and refraction, and caps the vertex swell amplitude. §e[*]§r Only active in Eclipse water mode.
+option.ECLIPSE_WATER_WAVE_SPEED=Wave Speed
+option.ECLIPSE_WATER_WAVE_SPEED.comment=Advection speed of the whole Eclipse wave field (Eclipse WATER_WAVE_SPEED). §e[*]§r The wave clock rides the same smooth visual timeline as the Bliss clouds, so during an Eclipse Time Transition the water executes the same cinematic time-lapse warp as the sky. §e[*]§r 0.0 freezes the waves. Only active in Eclipse water mode.
+option.ECLIPSE_PATCHY_WAVE_BLEND=Patchy Waves
+option.ECLIPSE_PATCHY_WAVE_BLEND.comment=Blend of the 600-block swell mask (Eclipse PATCHY_WAVE_BLEND). §e[*]§r 1.0: authentic Eclipse look -- calm glassy patches alternating with cresting wave fields. §e[*]§r 0.0: inverts the mask for a more uniformly agitated sea. Only active in Eclipse water mode.
+option.ECLIPSE_WAVE_DISPLACEMENT=Wave Displacement
+option.ECLIPSE_WAVE_DISPLACEMENT.comment=Amplitude of the PHYSICAL vertex deformation of the water mesh (Eclipse LARGE_WAVE_DISPLACEMENT). The surface geometry actually rises and falls with the swell, and the displaced positions are fed into RV's voxel light sampling so colored light from lava, sea lanterns or torches hugs the moving crests without clipping or floating. §e[*]§r 100 = authentic Eclipse amplitude, 0 = flat surface (normals still animate). Only active in Eclipse water mode.
+option.ECLIPSE_WAVES_A_RADIUS=Calm Detail Radius
+option.ECLIPSE_WAVES_A_RADIUS.comment=Normal-sampling radius used in CALM areas of the swell mask (Eclipse WAVES_A_RADIUS). Smaller values give sharper, more detailed wavelets; larger values give softer, smoother water. §e[*]§r Only active in Eclipse water mode.
+option.ECLIPSE_WAVES_B_RADIUS=Crest Detail Radius
+option.ECLIPSE_WAVES_B_RADIUS.comment=Normal-sampling radius used in CRESTING areas of the swell mask (Eclipse WAVES_B_RADIUS). The default 0.15 keeps wave crests crisp while calm water stays smooth. §e[*]§r Only active in Eclipse water mode.
+option.ECLIPSE_HYPER_DETAILED_WAVES=Hyper Detailed Waves
+option.ECLIPSE_HYPER_DETAILED_WAVES.comment=Locks the normal-sampling radius to 0.025 everywhere (Eclipse HYPER_DETAILED_WAVES), bypassing the distance-based detail falloff. Maximum wave micro-detail, but can shimmer at distance and costs a little performance. §e[*]§r Only active in Eclipse water mode.
+value.ECLIPSE_HYPER_DETAILED_WAVES.0=OFF
+value.ECLIPSE_HYPER_DETAILED_WAVES.1=ON
+
 option.ECLIPSE_TIME_ACTIVE=Eclipse Time Transition
 option.ECLIPSE_TIME_ACTIVE.comment=Master switch for the Eclipse cinematic GLOBAL time-interpolation system (in §aPerformance§r). §e[*]§r OFF (default): the pack is byte-identical to the stock build; the whole sky uses real time. §e[*]§r ON: the native celestial time is replaced by an engine-smoothed one, so when the world time jumps (/time set, sleeping, time plugins) the ENTIRE sun-vector pipeline -- sky gradient, atmospheric scattering, terrain light direction and cloud lighting -- glides smoothly to the new time instead of snapping. §e[*]§r The Iris-rendered shadow map and the vanilla sun/moon/star sprites are positioned by the engine from real time and still snap -- that part is engine-side and cannot be eased from the shader.
 

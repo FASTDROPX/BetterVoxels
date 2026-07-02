@@ -129,6 +129,22 @@
     #define WATER_BUMP_BIG 2.00 //[0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.10 1.20 1.30 1.40 1.50 1.60 1.70 1.80 1.90 2.00 2.20 2.40 2.60 2.80 3.00 3.25 3.50 3.75 4.00 4.50 5.00]
     #define WATER_SPEED_MULT 1.10 //[0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.05 1.10 1.15 1.20 1.25 1.30 1.35 1.40 1.45 1.50 1.55 1.60 1.65 1.70 1.75 1.80 1.85 1.90 1.95 2.00 2.20 2.40 2.60 2.80 3.00 3.25 3.50 3.75 4.00 4.50 5.00]
     #define WATER_SIZE_MULT 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
+    // ---- Eclipse water mode (Iteration 25: "Hydro-Voxel Fusion") ----------
+    // Separate selectable water pipeline ported from the Eclipse Shader
+    // (/eclipse_water.glsl). 0 = stock RV/Complementary water, byte-identical
+    // to the Iteration 24 build; 1 = Eclipse procedural wave deformation,
+    // analytical wave normals, wave-geometry refraction and caustics. The
+    // GUI identifier is ECLIPSE_WATER because RV's core already reserves the
+    // WATER_STYLE token for its own vanilla/fancy switch.
+    #define ECLIPSE_WATER 0 //[0 1]
+    #define ECLIPSE_WATER_WAVE_STRENGTH 1.0 //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+    #define ECLIPSE_WATER_WAVE_SPEED 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+    #define ECLIPSE_PATCHY_WAVE_BLEND 1.0 //[0.0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
+    #define ECLIPSE_WAVE_DISPLACEMENT 100 //[0 25 50 75 100 125 150 175 200]
+    #define ECLIPSE_WAVE_DISPLACEMENT_M (ECLIPSE_WAVE_DISPLACEMENT * 0.01)
+    #define ECLIPSE_WAVES_A_RADIUS 1.0 //[0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6 0.7 0.8 0.9 1.0 1.2 1.4 1.6 1.8 2.0]
+    #define ECLIPSE_WAVES_B_RADIUS 0.15 //[0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.6 0.7 0.8 0.9 1.0 1.2 1.4 1.6 1.8 2.0]
+    #define ECLIPSE_HYPER_DETAILED_WAVES 0 //[0 1]
 
     #define SHADOW_SMOOTHING 4 //[1 2 3 4]
     #define RAIN_PUDDLES 0 //[0 1 2 3 4]

@@ -22,7 +22,7 @@ in vec3 viewVector;
 
 in vec4 glColor;
 
-#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR
+#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR || ECLIPSE_WATER == 1
     flat in vec3 binormal, tangent;
 #endif
 
@@ -49,7 +49,7 @@ float shadowTime = shadowTimeVar2 * shadowTimeVar2;
     vec3 lightVec = sunVec;
 #endif
 
-#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR
+#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR || ECLIPSE_WATER == 1
     mat3 tbnMatrix = mat3(
         tangent.x, binormal.x, normal.x,
         tangent.y, binormal.y, normal.y,
@@ -94,6 +94,12 @@ float GetLinearDepth(float depth) {
 
 #ifdef TAA
     #include "/lib/antialiasing/jitter.glsl"
+#endif
+
+#if ECLIPSE_WATER == 1
+    // Iteration 25: Eclipse wave engine (heightmap, analytical normals,
+    // parallax, ripples) -- consumed by the water material below.
+    #include "/eclipse_water.glsl"
 #endif
 
 #if defined GENERATED_NORMALS || defined COATED_TEXTURES || WATER_STYLE >= 2
@@ -287,7 +293,7 @@ out vec3 viewVector;
 
 out vec4 glColor;
 
-#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR
+#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR || ECLIPSE_WATER == 1
     flat out vec3 binormal, tangent;
 #endif
 
@@ -301,7 +307,7 @@ attribute vec4 mc_midTexCoord;
 attribute vec4 at_tangent;
 
 //Common Variables//
-#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR
+#if WATER_STYLE >= 2 || RAIN_PUDDLES >= 1 && WATER_STYLE == 1 && WATER_MAT_QUALITY >= 2 || defined GENERATED_NORMALS || defined CUSTOM_PBR || ECLIPSE_WATER == 1
 #else
     vec3 binormal;
     vec3 tangent;
@@ -316,6 +322,11 @@ attribute vec4 at_tangent;
 
 #ifdef WAVING_WATER_VERTEX
     #include "/lib/materials/materialMethods/wavingBlocks.glsl"
+#endif
+
+#if ECLIPSE_WATER == 1 && ECLIPSE_WAVE_DISPLACEMENT > 0
+    // Iteration 25: Eclipse vertex swell (EclipseVertexWave).
+    #include "/eclipse_water.glsl"
 #endif
 
 //Program//
@@ -358,6 +369,22 @@ void main() {
 
     #ifdef WAVING_WATER_VERTEX
         DoWave(position.xyz, mat);
+    #endif
+
+    // Iteration 25 ("Hydro-Voxel Fusion"): Eclipse wave geometry. Water
+    // vertices morph on the Eclipse swell field. playerPos is exported AFTER
+    // this displacement, so the fragment stage -- and with it RV's voxel light
+    // sampling (DoLighting) and SSR (GetReflection) -- reads the TRUE world
+    // position of every crest and trough: colored voxel light adheres to the
+    // moving surface with no extra data stream. The near field stays within a
+    // fraction of a block, keeping displaced fragments inside their source
+    // water voxel.
+    #if ECLIPSE_WATER == 1 && ECLIPSE_WAVE_DISPLACEMENT > 0
+        if (mat == 32000) {
+            vec3 eclipseWorldPosV = position.xyz + cameraPosition;
+            float eclipseRangeV = min(1.0 + pow2(length(position.xyz) / 256.0), 4.0);
+            position.y += (EclipseVertexWave(eclipseWorldPosV, eclipseRangeV) * 0.6 - 0.5) * ECLIPSE_WAVE_DISPLACEMENT_M;
+        }
     #endif
 
     playerPos = position.xyz;
