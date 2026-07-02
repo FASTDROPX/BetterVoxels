@@ -223,6 +223,31 @@
             eclipseBump += 0.6 * EclipseRipples(eclipseWorldPos.xz) * eclipseRippleFade * smoothstep(35.0, 10.0, lViewPos);
         }
 
+        // Iteration 27 -- procedural PLAYER WAKE. Eclipse's entity ripple system
+        // needs mod-only uniforms (waterEnteredPosition / waveSim2 ...) that read
+        // zero under Iris, so this instead adapts Eclipse's WATER_INTERACTION==1
+        // analytic ring using ONLY real uniforms (cameraPosition /
+        // previousCameraPosition / frameTimeCounter) -- no fake uniforms, no
+        // buffers. Concentric ripples emanate from the player's water-plane
+        // position, gated by camera motion, so swimming or walking through water
+        // disturbs the surface around the player in real time.
+        #if ECLIPSE_WATER_INTERACTION == 1
+            if (abs(worldGeoNormal.y) > 0.5) {
+                vec2 eclipseToSurf = eclipseWorldPos.xz - cameraPosition.xz;
+                float eclipseWakeDist = length(eclipseToSurf);
+                float eclipseMove = length((cameraPosition - previousCameraPosition).xz);
+                float eclipseWakeAmp = smoothstep(0.004, 0.06, eclipseMove)          // moving
+                                     * smoothstep(2.5, 0.0, abs(eclipseWorldPos.y - cameraPosition.y)) // near surface
+                                     * smoothstep(4.0, 0.0, eclipseWakeDist)         // near the player
+                                     * ECLIPSE_WATER_WAKE_STRENGTH;
+                if (eclipseWakeAmp > 0.001 && eclipseWakeDist > 0.05) {
+                    float eclipsePhase = eclipseWakeDist * 6.0 - frameTimeCounter * 5.0;
+                    vec2 eclipseWakeDir = eclipseToSurf / eclipseWakeDist;
+                    eclipseBump.xy += eclipseWakeDir * cos(eclipsePhase) * eclipseWakeAmp * 0.35;
+                }
+            }
+        #endif
+
         // Fold in the vertex-swell gradient so the shading normal follows the
         // morphing geometry (Eclipse feeds its displaced vertex normal into
         // the TBN base; on the water plane this additive fold is equivalent).
@@ -288,6 +313,15 @@
 
             float waterFog = max0(1.0 - exp(lViewPosDifM * 0.075));
             color.a *= 0.25 + 0.75 * waterFog;
+
+            #if ECLIPSE_WATER == 1
+                // Iteration 27: Eclipse deep-ocean surface colour. The same
+                // per-channel Beer-Lambert absorption used underwater is applied
+                // to the surface as it deepens (waterFog = view depth), so shallow
+                // water stays clear and deep water shifts to Eclipse's blue-green.
+                vec3 eclipseAbsorbS = vec3(ECLIPSE_WATER_ABSORB_R, ECLIPSE_WATER_ABSORB_G, ECLIPSE_WATER_ABSORB_B) * ECLIPSE_WATER_ABSORB_MULT;
+                color.rgb = mix(color.rgb, color.rgb * exp(-eclipseAbsorbS * 4.0), waterFog);
+            #endif
 
             #if defined BRIGHT_CAVE_WATER && WATER_ALPHA_MULT < 200
                 // For better water visibility in caves and some extra color pop outdoors
@@ -381,6 +415,16 @@
 
             highlightMult = min(pow2(pow2(dot(colorP.rgb, colorP.rgb) * 0.4)), 0.5);
             highlightMult *= (16.0 - 15.0 * fresnel2) * (sunVisibility > 0.5 ? 0.85 : 0.425);
+        #endif
+
+        #if ECLIPSE_WATER == 1
+            // Iteration 27: Eclipse sun specular. A near-mirror smoothness plus a
+            // sharpened, fresnel-weighted glint gives Eclipse's crisp, bright sun
+            // reflection off the wave crests. ECLIPSE_WATER_SPECULAR scales it
+            // (0 = RV-like, 1 = default Eclipse punch).
+            smoothnessG = max(smoothnessG, 0.9);
+            highlightMult = mix(highlightMult, highlightMult * (2.5 + 6.0 * fresnel2), min1(ECLIPSE_WATER_SPECULAR));
+            highlightMult *= 0.5 + 0.5 * ECLIPSE_WATER_SPECULAR;
         #endif
     #endif
     // ============================== End of Step 4 ============================== //

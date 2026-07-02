@@ -1827,3 +1827,83 @@ VERIFICATION (Iteration 26)
    - shaders.properties: no dangling refs, even grids, all value-lists         : PASS
    - ECLIPSE_WATER=0 still byte-identical to the Iteration 24 build            : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 27: Eclipse Water Optics (Absorption / Deep-Ocean Colour /
+Sun Specular) and Procedural Player-Wake Interaction
+=======================================================================
+Iteration 25/26 gave Eclipse mode its wave GEOMETRY and normals. This adds the
+two missing halves: the optical MATERIAL look and dynamic player interaction.
+
+SOURCE ANALYSIS (Eclipse, branch Unstable, read over raw HTTPS).
+  - Water colour / absorption: lib/settings.glsl + all_translucent.fsh. Eclipse's
+    deep-ocean look is a PER-CHANNEL Beer-Lambert absorption:
+        DirectLightColor *= exp(-vec3(Water_Absorb_R,_G,_B) * (depth/|sunY|))
+    with Water_Absorb_R=0.392, _G=0.108, _B=0.066 -- red is absorbed ~6x faster
+    than blue, which is exactly what turns deep water blue-green.
+  - Sun specular: lib/specular.glsl is a full 2500-line GGX PBR; not portable
+    wholesale into RV's reflection pipeline, so its CHARACTER (near-mirror
+    smoothness + a sharp fresnel-weighted glint) is reproduced via RV's existing
+    smoothnessG / highlightMult hooks rather than a verbatim port.
+  - Entity interaction: all_translucent.fsh WATER_INTERACTION. Mode 1 is an
+    analytic enter/exit ring; mode 2 is an image2D wave simulation. BOTH rely on
+    uniforms that only Eclipse's mod provides -- waterEnteredPosition/Time/
+    Velocity, waterExitedPosition/..., waterEnteredAltitude, waveSim2,
+    previousCameraPositionWave2. Under plain Iris these read ZERO (the same
+    Iteration-16 trap). So a verbatim entity port is impossible without Eclipse's
+    Java side, and building a fresh wave-sim pass would risk the RV SSBO/buffer
+    layout. The stable path is an analytic wake from REAL Iris uniforms.
+
+FEATURE 1 -- OPTICS (all gated behind ECLIPSE_WATER == 1):
+  - Underwater scattering (lib/common.glsl waterFogColor): replaced with Eclipse's
+    transmission colour exp(-absorb*6) at RV's fog brightness, so being underwater
+    and the underwater sky fallback (sky.glsl / composite.glsl) all read Eclipse's
+    blue-green.
+  - Surface deep-ocean colour (water.glsl Step 3): the same absorption applied to
+    the surface as it deepens (mix by RV's waterFog view-depth term) -- shallow
+    water stays clear, deep water shifts blue-green. Ties to the SAME sliders.
+  - Sun specular (water.glsl Step 4): smoothnessG raised to near-mirror and
+    highlightMult sharpened with a fresnel-weighted boost, scaled by
+    ECLIPSE_WATER_SPECULAR (0 = RV-soft, 1 = Eclipse punch).
+  Sliders: ECLIPSE_WATER_ABSORB_R/_G/_B (defaults 0.40/0.10/0.06 ~ Eclipse),
+  ECLIPSE_WATER_ABSORB_MULT (master depth-tint strength), ECLIPSE_WATER_SPECULAR.
+
+FEATURE 2 -- PLAYER WAKE (water.glsl Step 2, gated ECLIPSE_WATER_INTERACTION==1):
+  A faithful adaptation of Eclipse's WATER_INTERACTION==1 analytic ring, but
+  sourced from the player's actual position (cameraPosition) and motion
+  (cameraPosition - previousCameraPosition) instead of Eclipse's unavailable
+  waterEntered/Exited uniforms. Concentric ripples (phase = dist*6 - time*5)
+  emanate from the player's water-plane position, gated by camera speed, surface
+  proximity and distance, folded into the Eclipse wave normal. So swimming or
+  walking through water disturbs the surface around the player in REAL TIME, with
+  NO fake uniforms and NO new buffers. Sliders: ECLIPSE_WATER_INTERACTION (ON/OFF),
+  ECLIPSE_WATER_WAKE_STRENGTH.
+  HONEST SCOPE NOTE: this tracks the PLAYER (the primary case). Arbitrary mobs
+  cannot be tracked without Eclipse's mod-side uniforms or RV's separate,
+  buffer-heavy INTERACTIVE_WATER simulation, so they are intentionally not wired
+  here to keep the port stable and buffer-safe.
+
+MENU / SAFETY.
+  - ECLIPSE_WATER_SETTINGS reorganised to an even 14-item grid with a new
+    [ECLIPSE_WATER_OPTICS] sub-screen (10 items) for the colour/specular sliders;
+    the interaction toggle + wake strength sit on the main screen. Verified: no
+    dangling sub-screen refs, all new options carry value-lists, six new floats
+    registered in sliders=, ECLIPSE_WATER_INTERACTION is an int 0/1 (button).
+  - "Visually identical to Eclipse" is approached, not literally reached: RV and
+    Eclipse use different tonemappers, sky/light-colour systems and reflection
+    pipelines, so this maps Eclipse's water COLOUR PALETTE, per-channel
+    ABSORPTION curve and specular CHARACTER onto RV's structurally-sound
+    blending/fog/SSR machinery.
+  - Pure ALU; no textures/SSBOs/new uniforms/buffer or DRAWBUFFERS changes.
+  - ECLIPSE_WATER == 0 remains byte-identical to the Iteration 26 build.
+
+VERIFICATION (Iteration 27)
+   - per-channel absorption tints surface (by depth) + underwater fog           : PASS
+   - specular boost via existing smoothnessG/highlightMult hooks                 : PASS
+   - player wake uses only real uniforms (camera/prevCamera/frameTimeCounter)    : PASS
+   - no Eclipse mod-only uniforms referenced (no zero-reads)                     : PASS
+   - #if/brace balance; no float define inside #if                              : PASS
+   - shaders.properties: even grids, no dangling refs, all value-lists          : PASS
+   - ECLIPSE_WATER=0 byte-identical to Iteration 26                             : PASS
+=======================================================================

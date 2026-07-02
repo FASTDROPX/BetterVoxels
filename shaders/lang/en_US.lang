@@ -450,6 +450,25 @@ option.ECLIPSE_WAVES_B_RADIUS=Crest Detail Radius
 option.ECLIPSE_WAVES_B_RADIUS.comment=Normal-sampling radius used in CRESTING areas of the swell mask (Eclipse WAVES_B_RADIUS). The default 0.15 keeps wave crests crisp while calm water stays smooth. §e[*]§r Only active in Eclipse water mode.
 option.ECLIPSE_HYPER_DETAILED_WAVES=Hyper Detailed Waves
 option.ECLIPSE_HYPER_DETAILED_WAVES.comment=Locks the normal-sampling radius to 0.025 everywhere (Eclipse HYPER_DETAILED_WAVES), bypassing the distance-based detail falloff. Maximum wave micro-detail, but can shimmer at distance and costs a little performance. §e[*]§r Only active in Eclipse water mode.
+
+screen.ECLIPSE_WATER_OPTICS=Eclipse Water Optics
+screen.ECLIPSE_WATER_OPTICS.comment=Deep-ocean colour, absorption and sun specular ported from Eclipse. These only take effect while §aWater Physics Style§r is set to §aEclipse Physics & Waves§r.
+option.ECLIPSE_WATER_ABSORB_R=Absorption Red
+option.ECLIPSE_WATER_ABSORB_R.comment=Per-channel Beer-Lambert light absorption for water, red channel (Eclipse Water_Absorb_R). Higher = red light is absorbed faster with depth. Red absorbs fastest, which is what turns deep water blue-green. §e[*]§r Default 0.40 matches Eclipse. Only active in Eclipse water mode.
+option.ECLIPSE_WATER_ABSORB_G=Absorption Green
+option.ECLIPSE_WATER_ABSORB_G.comment=Per-channel Beer-Lambert light absorption for water, green channel (Eclipse Water_Absorb_G). §e[*]§r Default 0.10 matches Eclipse. Only active in Eclipse water mode.
+option.ECLIPSE_WATER_ABSORB_B=Absorption Blue
+option.ECLIPSE_WATER_ABSORB_B.comment=Per-channel Beer-Lambert light absorption for water, blue channel (Eclipse Water_Absorb_B). Lowest of the three, so blue penetrates deepest. §e[*]§r Default 0.06 matches Eclipse. Only active in Eclipse water mode.
+option.ECLIPSE_WATER_ABSORB_MULT=Absorption Strength
+option.ECLIPSE_WATER_ABSORB_MULT.comment=Master multiplier on the three absorption channels. §e[*]§r Higher = water colours deepen faster and the deep ocean reads darker/richer; 0.0 = clear water with no depth tint. Drives both the surface deep-water colour and the underwater scattering fog. Only active in Eclipse water mode.
+option.ECLIPSE_WATER_SPECULAR=Sun Specular
+option.ECLIPSE_WATER_SPECULAR.comment=Strength of Eclipse's crisp sun reflection off the wave crests. §e[*]§r 1.0 = default Eclipse punch (near-mirror smoothness, sharpened fresnel-weighted glint); 0.0 = RV's softer highlight. Only active in Eclipse water mode.
+option.ECLIPSE_WATER_INTERACTION=Player Ripples
+option.ECLIPSE_WATER_INTERACTION.comment=Real-time surface ripples that emanate from the player as they swim or walk through water. §e[*]§r Fully procedural (driven by camera motion) so it needs no extra buffers. Eclipse's own entity ripple system relies on mod-side data that is unavailable under Iris, so this reproduces the player interaction directly. §e[*]§r Only active in Eclipse water mode.
+value.ECLIPSE_WATER_INTERACTION.0=OFF
+value.ECLIPSE_WATER_INTERACTION.1=ON
+option.ECLIPSE_WATER_WAKE_STRENGTH=Ripple Strength
+option.ECLIPSE_WATER_WAKE_STRENGTH.comment=Amplitude of the player wake ripples. §e[*]§r Higher = more pronounced concentric waves around the moving player; 0.0 disables them (same as turning Player Ripples off). Only active in Eclipse water mode.
 value.ECLIPSE_HYPER_DETAILED_WAVES.0=OFF
 value.ECLIPSE_HYPER_DETAILED_WAVES.1=ON
 
