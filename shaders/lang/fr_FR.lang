@@ -1317,5 +1317,5 @@ value.ECLIPSE_TIME_ACTIVE.1=OFF
 value.ECLIPSE_TIME_ACTIVE.2=Ciel
 value.ECLIPSE_TIME_ACTIVE.3=Ciel + Eau
 option.TIME_TRANSITION_SPEED=Vitesse de transition temporelle
-option.TIME_TRANSITION_SPEED.comment=Durée (en secondes) du glissement lors d'un saut de temps. §e[*]§r La valeur par défaut 7.0 est un palier dédié réglé pour que le glissement se TERMINE visiblement en ~7 secondes, sans gel en cours ni claquement final. §e[*]§r 0.0 = OFF (Instantané). §e[*]§r N'a d'effet que si la §aTransition temporelle Eclipse§r est sur Ciel ou Ciel + Eau.
+option.TIME_TRANSITION_SPEED.comment=Durée (en secondes) du glissement lors d'un saut de temps. §e[*]§r La valeur par défaut est le palier de fondu dédié de 7.0 secondes (huit paliers : 0.4 / 0.8 / 1.2 / 2.0 / 3.0 / 5.0 / 7.0 / 10.0 s). §e[*]§r 0.0 = OFF (Instantané). §e[*]§r N'a d'effet que si la §aTransition temporelle Eclipse§r est sur Ciel ou Ciel + Eau.
 value.TIME_TRANSITION_SPEED.0.0=OFF (Instantané)

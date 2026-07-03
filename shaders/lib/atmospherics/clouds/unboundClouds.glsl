@@ -43,13 +43,12 @@ float GetCloudNoise(vec3 tracePos, int cloudAltitude, float lTracePosXZ, float c
         wind *= blissCloudSyncedTime;
     #else
         #define CLOUD_SPEED_MULT_M CLOUD_SPEED_MULT * 0.01
+        wind *= frameTimeCounter * CLOUD_SPEED_MULT_M;
         #if ECLIPSE_TIME_ACTIVE >= 2
-            // Iteration 33: unconditional shaped clock (see cloudCoord.glsl) --
-            // same steady-state rate as frameTimeCounter; the old runtime
-            // eclActive clock-flip was part of the transition hitch.
-            wind *= blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
-        #else
-            wind *= frameTimeCounter * CLOUD_SPEED_MULT_M;
+            // Iteration 34: restored Iteration 31 structure. Custom cloud speed
+            // stays real-time normally, but warps onto the eased world-visual
+            // clock during a transition. (wind base 0.0006.)
+            if (eclActive) wind = 0.0006 * blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
         #endif
     #endif
     #if CLOUD_UNBOUND_SIZE_MULT != 100

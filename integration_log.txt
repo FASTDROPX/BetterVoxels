@@ -2311,3 +2311,66 @@ VERIFICATION (Iteration 33)
    - Preprocessor conditionals balanced in all edited files                   : PASS
    - Defaults == profile.HIGH -> auto-selects as High+ (Default) on launch    : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 34: Time-transition math reverted to the stable Iteration 31
+exponential-decay structure; everything else kept strictly at Iteration 33
+=======================================================================
+SYMPTOM. The Iteration 33 interpolation math (quintic smootherstep gap
+shaping + native-direction vector tracking) was reported to cause
+calculation overflows and instant freezes on time commands in the field
+(floating-point-precision-limit-like behaviour).
+
+1. MATH REVERT (calculation logic ONLY).
+lib/common.glsl now runs the exact lightweight Iteration 31 calculation
+again: the engine-side smooth() uniforms carry the frame-rate-independent
+exponential decay (1 - exp(-t/tau), maintained by Iris across frames); the
+shader reconstructs the eased angle with a single atan of the raw smoothed
+(sin, cos) pair, runs RV's sunAngle -> timeAngle remap, and selects
+eased/native through the restored eclMag > 0.01 safety gate (eclActive).
+The quintic completion curve, the wrap-aware gap math and the 2% native-
+direction vector nudge are fully stripped out -- no trigonometric feedback
+terms remain in the signal path. blissCloudTimeBase and the custom-speed
+cloud winds (cloudCoord.glsl / unboundClouds.glsl) are back on the
+Iteration 31 "if (eclActive)" structure. The dedicated default S70/C70
+engine tier is retuned from the 3.0 s quintic-completion constant to a
+plain 7.0 s exponential fade, so the tier fade equals the slider seconds
+again, exactly like every other tier under the Iteration 31 semantics.
+
+2. EVERYTHING ELSE KEPT STRICTLY FROM ITERATION 33 (verified by diff --
+only the math block, its comments and the tier fade changed):
+   - all baked High_Default.txt compile-time defaults (GI_STRENGTH=2,
+     GI_SAMPLE_COUNT=13, SDF_UPDATE_INTERVAL=0, MAX_TRACE_COUNT=256,
+     water/caustic style 4, shadows, blur, puddles, emissives, ...)
+   - profile.HIGH exactly as in Iteration 33 (incl. WATER_STYLE_DEFINE=4,
+     LIGHT_COLOR_MULTS, ECLIPSE_TIME_ACTIVE=2, TIME_TRANSITION_SPEED=7.0)
+   - the Iteration 32 Eclipse water fixes (Step-4 specular branch etc.)
+   - LIGHT_COLOR_MULTS remains ON by default (lib/common.glsl)
+
+3. PROFILE NAME (legacy codes only, re-verified).
+Both translation files contain zero raw hex color tags (grep clean);
+profile.HIGH renders via standard vanilla legacy codes only:
+  en_US : (S1)(Sl)High+ (Default)   fr_FR : (S1)(Sl)Eleve+ (Defaut)
+(bold + dark blue).
+
+4. THREE TRANSITION MODES (kept).
+ECLIPSE_TIME_ACTIVE stays the strict 3-state selector //[1 2 3] with
+default 2: 1 = OFF (compiled out), 2 = Sky (sky/atmosphere glides; the
+Eclipse wave clock stays on steady real time -- wave speed never scaled),
+3 = Sky + Water (eclipseWaterTimeG rides blissCloudSyncedTime and warps
+with the sky). eclipse_water.glsl is untouched this iteration.
+
+VERIFICATION (Iteration 34)
+   - No quintic/nudge symbols remain (eclShaped/eclDelta/eclGap/eclVec/
+     eclNativeTurn/eclRawAngle grep clean)                                    : PASS
+   - Iteration 31 math restored verbatim (atan + remap + eclMag gate)         : PASS
+   - eclActive restored and consumed by cloudCoord/unboundClouds as in 31     : PASS
+   - S70/C70 tier = plain smooth(..., 7.0, 7.0) exponential fade              : PASS
+   - Diff touches ONLY the math block, comments and tier fade                 : PASS
+   - Defaults, profile.HIGH, water params byte-identical to Iteration 33      : PASS
+   - LIGHT_COLOR_MULTS enabled by default and pinned in the profile           : PASS
+   - ECLIPSE_TIME_ACTIVE //[1 2 3], default 2 (Sky); mode 2 leaves wave
+     speed untouched, mode 3 warps waves with the sky                         : PASS
+   - Lang files free of raw hex tags; (S1)(Sl) legacy name renders            : PASS
+   - Preprocessor conditionals balanced in all edited files                   : PASS
+=======================================================================
