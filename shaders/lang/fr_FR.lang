@@ -5,9 +5,9 @@ profile.POTATO=§4Pomme de terre
 profile.VERYLOW=§6Très basse
 profile.LOW=§eBasse
 profile.MEDIUM=§aMoyen
-#Iteration 32: profil renommé "Élevé+ (Défaut)" avec le même dégradé hexadécimal par
-#caractère que en_US (#006eff -> #00d5ff, un code couleur avant chaque lettre et parenthèse).
-profile.HIGH=§#006effÉ§#0076ffl§#007effe§#0086ffv§#008effé§#0096ff+ §#009eff(§#00a5ffD§#00adffé§#00b5fff§#00bdffa§#00c5ffu§#00cdfft§#00d5ff)
+#Iteration 33: les codes couleur hexadécimaux bruts de l'itération 32 ne font pas partie
+#des codes de formatage hérités compris par le client. Remplacés par §1 (bleu foncé) + §l (gras).
+profile.HIGH=§1§lÉlevé+ (Défaut)
 profile.VERYHIGH=§9Très élevé
 profile.ULTRA=§dUltra
 profile.comment=Les profils de shaders modifient les paramètres de performance en optimisant le rapport entre la fidélité visuelle et la performance. §e[*]§r Il est recommandé d'utiliser l'un de ces profils pour vos paramètres, sauf si vous savez ce que vous faites. §e[*]§r Tous les paramètres affectés peuvent être trouvés dans le menu 'Performance Settings' ou le menu 'Rethinking Voxels Settings'.
@@ -1309,3 +1309,13 @@ option.ALLAY_COL_B=Bleu
 option.TNT_COL_R=Rouge
 option.TNT_COL_G=Vert
 option.TNT_COL_B=Bleu
+
+#Iteration 33: sélecteur de transition temporelle Eclipse (3 états stricts)
+option.ECLIPSE_TIME_ACTIVE=Transition temporelle Eclipse
+option.ECLIPSE_TIME_ACTIVE.comment=Mode du système d'interpolation temporelle cinématique Eclipse. §e[*]§r §cOFF§r : temps réel partout, système désactivé à la compilation. §e[*]§r §aCiel§r (défaut) : lors d'un saut de temps, tout le pipeline du vecteur solaire (ciel, diffusion atmosphérique, direction de la lumière, éclairage des nuages) glisse en douceur vers le nouveau temps. La vitesse des vagues n'est PAS modifiée dans ce mode. §e[*]§r §bCiel + Eau§r : le même glissement du ciel, et l'horloge des vagues Eclipse suit aussi la chronologie lissée. §e[*]§r La carte d'ombres et les sprites vanilla du soleil/de la lune restent positionnés par le moteur et sautent quand même (côté moteur).
+value.ECLIPSE_TIME_ACTIVE.1=OFF
+value.ECLIPSE_TIME_ACTIVE.2=Ciel
+value.ECLIPSE_TIME_ACTIVE.3=Ciel + Eau
+option.TIME_TRANSITION_SPEED=Vitesse de transition temporelle
+option.TIME_TRANSITION_SPEED.comment=Durée (en secondes) du glissement lors d'un saut de temps. §e[*]§r La valeur par défaut 7.0 est un palier dédié réglé pour que le glissement se TERMINE visiblement en ~7 secondes, sans gel en cours ni claquement final. §e[*]§r 0.0 = OFF (Instantané). §e[*]§r N'a d'effet que si la §aTransition temporelle Eclipse§r est sur Ciel ou Ciel + Eau.
+value.TIME_TRANSITION_SPEED.0.0=OFF (Instantané)

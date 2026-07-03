@@ -178,25 +178,34 @@
     #define CLOUD_CLOSED_AREA_CHECK
     #define CLOUD_ALT1 192 //[-96 -92 -88 -84 -80 -76 -72 -68 -64 -60 -56 -52 -48 -44 -40 -36 -32 -28 -24 -20 -16 -10 -8 -4 0 4 8 12 16 20 22 24 28 32 36 40 44 48 52 56 60 64 68 72 76 80 84 88 92 96 100 104 108 112 116 120 124 128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192 196 200 204 208 212 216 220 224 228 232 236 240 244 248 252 256 260 264 268 272 276 280 284 288 292 296 300 304 308 312 316 320 324 328 332 336 340 344 348 352 356 360 364 368 372 376 380 384 388 392 396 400 404 408 412 416 420 424 428 432 436 440 444 448 452 456 460 464 468 472 476 480 484 488 492 496 500 510 520 530 540 550 560 570 580 590 600 610 620 630 640 650 660 670 680 690 700 710 720 730 740 750 760 770 780 790 800]
     #define CLOUD_SPEED_MULT 100 //[0 5 7 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300 325 350 375 400 425 450 475 500 550 600 650 700 750 800 850 900]
-    // Cinematic time-transition easing duration, in SECONDS -- now a LIVE control
-    // (Iteration 23). shaders.properties pre-bakes SEVEN engine-smoothed fade tiers
-    // (0.4/0.8/1.2/2.0/3.0/5.0/10.0 s); the ECLIPSE block below picks the tier whose
-    // fade matches this slider (constant-folded, no runtime cost), so changing this
-    // value genuinely changes how fast the sun/sky/clouds glide across a time jump.
-    // 0.0 == OFF (Instant): easing is skipped and time snaps like vanilla. Only has
-    // any effect while ECLIPSE_TIME_ACTIVE is enabled.
-    #define TIME_TRANSITION_SPEED 1.2 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
-    // Master switch for the Eclipse-style GLOBAL cinematic smooth time (in the
-    // Performance screen). OFF by default (the pack is byte-identical when off).
-    // When ON, the native celestial timeAngle (lib/common.glsl) is replaced by
-    // one reconstructed from the engine-smoothed sin/cos of the sun angle, so
-    // the ENTIRE sun-vector pipeline -- sky gradient, atmospheric scattering,
-    // terrain light direction and cloud lighting -- glides smoothly on /time
-    // set, bed-sleep or time plugins instead of snapping. (The Iris-rendered
-    // shadow map and the vanilla sun/moon/star sprites are positioned by the
-    // engine from real time and still snap; those are engine-side.) Iteration
-    // 14: moved off the colortex feedback onto a robust smooth() uniform.
-    //#define ECLIPSE_TIME_ACTIVE
+    // Cinematic time-transition easing duration, in SECONDS -- a LIVE control
+    // (Iteration 23; retuned Iteration 33). shaders.properties pre-bakes EIGHT
+    // engine-smoothed fade tiers; the ECLIPSE block below picks the tier whose
+    // fade matches this slider (constant-folded, no runtime cost). DEFAULT is
+    // 7.0: the dedicated 7-second tier, whose smoothing constant is chosen so
+    // the Iteration 33 quintic completion curve makes the glide visibly FINISH
+    // at ~7 seconds (residual under 1% of a half-turn) instead of crawling on
+    // an asymptotic exponential tail.
+    // 0.0 == OFF (Instant): easing is skipped and time snaps like vanilla. Only
+    // has any effect while ECLIPSE_TIME_ACTIVE is 2 (Sky) or 3 (Sky + Water).
+    #define TIME_TRANSITION_SPEED 7.0 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
+    // Eclipse-style GLOBAL cinematic smooth time (Performance screen).
+    // Iteration 33: a strict THREE-STATE selector, default 2:
+    //   1 = OFF          : real time everywhere; the transition system is
+    //       compiled out and the pack behaves like the stock build.
+    //   2 = Sky (DEFAULT): the native celestial timeAngle is replaced by one
+    //       reconstructed from the engine-smoothed sin/cos of the sun angle, so
+    //       the ENTIRE sun-vector pipeline -- sky gradient, atmospheric
+    //       scattering, terrain light direction and cloud lighting -- glides
+    //       smoothly across a /time set, bed-sleep or time-plugin jump. The
+    //       water wave-speed parameters are NOT scaled or touched in this mode:
+    //       the Eclipse wave clock advects on steady real time.
+    //   3 = Sky + Water  : the same sky transition, and the Eclipse wave clock
+    //       additionally rides the eased visual timeline, so the wave-speed
+    //       equations time-lapse warp together with the sky.
+    // (The Iris-rendered shadow map and the vanilla sun/moon/star sprites are
+    // positioned by the engine from real time and still snap; engine-side.)
+    #define ECLIPSE_TIME_ACTIVE 2 //[1 2 3]
     #define CLOUD_R 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
     #define CLOUD_G 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
     #define CLOUD_B 100 //[25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100 110 120 130 140 150 160 170 180 190 200 220 240 260 280 300]
@@ -383,7 +392,7 @@
     #define GR_BB 100 //[0 4 8 12 16 20 24 28 32 36 40 44 48 52 56 60 64 68 72 76 80 84 88 92 96 100 108 116 124 132 140 148 156 164 172 180 188 196 200 212 224 236 248 260 272 284 296 300 316 332 348 364 380 396 400 424 448 472 496 500]
     #define GR_BC 1.00 //[0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.10 1.20 1.30 1.40 1.50 1.60 1.70 1.80 1.90 2.00 2.20 2.40 2.60 2.80 3.00 3.25 3.50 3.75 4.00 4.50 5.00]
 
-    //#define LIGHT_COLOR_MULTS
+    #define LIGHT_COLOR_MULTS
     #define ATM_COLOR_MULTS
     #define LIGHT_MORNING_R 1.00 //[0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.10 1.20 1.30 1.40 1.50 1.60 1.70 1.80 1.90 2.00]
     #define LIGHT_MORNING_G 1.00 //[0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.10 1.20 1.30 1.40 1.50 1.60 1.70 1.80 1.90 2.00]
@@ -809,38 +818,71 @@
     // the original (worldTime + mod(worldDay,100)*24000.0). With it on it rides
     // the eased visual angle, so on a time jump the clouds and ground shadows
     // execute a high-speed time-lapse warp in lock-step with the eased sun.
-    #ifdef ECLIPSE_TIME_ACTIVE
-      // Iteration 23 -- LIVE speed slider. shaders.properties keeps seven engine-
-      // smoothed sin/cos pairs at fixed fade tiers (0.4/0.8/1.2/2.0/3.0/5.0/10.0 s).
-      // Pick the pair whose fade best matches TIME_TRANSITION_SPEED. Because that
-      // slider is a compile-time constant, this ternary ladder folds to ONE pair --
-      // no runtime cost -- and each tier is a REAL cross-frame-smoothed uniform, so
-      // the transition has no snap and needs no per-frame shader state. (A single
-      // 10s uniform "rescaled" in GLSL cannot work: from one smoothed sample the
-      // shader has no way to know how far into the transition it is, so any pull
-      // toward the target reintroduces a snap. Selecting a genuinely slower/faster
-      // engine tier is the correct way to make the slider drive the duration.)
+    #if ECLIPSE_TIME_ACTIVE >= 2
+      // Iteration 23 -- LIVE speed slider. shaders.properties keeps EIGHT engine-
+      // smoothed sin/cos pairs at fixed fade tiers. Pick the pair whose fade best
+      // matches TIME_TRANSITION_SPEED. Because that slider is a compile-time
+      // constant, this ternary ladder folds to ONE pair -- no runtime cost -- and
+      // each tier is a REAL cross-frame-smoothed uniform, so the transition needs
+      // no per-frame shader state. The 7.0 slider selects the dedicated 7-SECOND
+      // tier: its smoothing constant (3.0 s) is set so the quintic-shaped glide
+      // below visibly COMPLETES at ~7 s (10*e^(-3t/3.0) < 1% at t = 7).
       float blissSunAngleS =
           (TIME_TRANSITION_SPEED <= 0.5 ? blissSunAngleS04  :
            TIME_TRANSITION_SPEED <= 0.9 ? blissSunAngleS08  :
            TIME_TRANSITION_SPEED <= 1.5 ? blissSunAngleS12  :
            TIME_TRANSITION_SPEED <= 2.4 ? blissSunAngleS20  :
            TIME_TRANSITION_SPEED <= 3.9 ? blissSunAngleS30  :
-           TIME_TRANSITION_SPEED <= 6.0 ? blissSunAngleS50  : blissSunAngleS100);
+           TIME_TRANSITION_SPEED <= 6.0 ? blissSunAngleS50  :
+           TIME_TRANSITION_SPEED <= 8.5 ? blissSunAngleS70  : blissSunAngleS100);
       float blissSunAngleC =
           (TIME_TRANSITION_SPEED <= 0.5 ? blissSunAngleC04  :
            TIME_TRANSITION_SPEED <= 0.9 ? blissSunAngleC08  :
            TIME_TRANSITION_SPEED <= 1.5 ? blissSunAngleC12  :
            TIME_TRANSITION_SPEED <= 2.4 ? blissSunAngleC20  :
            TIME_TRANSITION_SPEED <= 3.9 ? blissSunAngleC30  :
-           TIME_TRANSITION_SPEED <= 6.0 ? blissSunAngleC50  : blissSunAngleC100);
+           TIME_TRANSITION_SPEED <= 6.0 ? blissSunAngleC50  :
+           TIME_TRANSITION_SPEED <= 8.5 ? blissSunAngleC70  : blissSunAngleC100);
       // Slider 0.0 == OFF (Instant): skip easing entirely and snap like vanilla.
+      // TIME_TRANSITION_SPEED is a compile-time constant, so this bool folds at
+      // compile time -- it can never flip mid-play.
       const bool eclEnabled = (TIME_TRANSITION_SPEED > 0.05);
-      // Safety: if the smooth() uniforms are unavailable (some setups) the
-      // (sin,cos) pair reads ~0; fall back to native time so the sky can never
-      // freeze -- it just stops easing.
-      float eclMag = blissSunAngleS * blissSunAngleS + blissSunAngleC * blissSunAngleC;
-      float eclSunAngle = fract(atan(blissSunAngleS, blissSunAngleC) * 0.15915494309189535); // /(2*pi)
+
+      // ---- Iteration 33: freeze/snap-proof interpolation rewrite. ----
+      // The old path took atan() of the RAW smoothed (sin,cos) pair and selected
+      // native time behind a hard runtime gate (eclMag > 0.01). On the most
+      // common jump of all -- sleeping, ~half a turn -- the smoothed vector
+      // passes close to the ORIGIN: the reconstructed angle grinds and lurches
+      // (the mid-air hitch/freeze), the magnitude gate trips, and timeAngle
+      // hard-snapped to the new daytime. Fixed in two moves, with no runtime
+      // boolean anywhere in the signal path:
+      //  (a) NUDGE. Add a tiny bias (2% of unit length) pointing at the CURRENT
+      //      native sun direction before taking atan. While the smoothed vector
+      //      is healthy the bias is negligible; exactly at the degenerate
+      //      midpoint it steers the reconstruction smoothly through toward the
+      //      target; and if the smooth() uniforms are unavailable (~0 forever),
+      //      the angle simply equals native time -- the old fallback behaviour
+      //      -- with no gate left to mis-trip.
+      float eclNativeTurn = sunAngle * 6.28318530718;
+      vec2 eclVec = vec2(blissSunAngleS, blissSunAngleC)
+                  + 0.02 * vec2(sin(eclNativeTurn), cos(eclNativeTurn));
+      float eclRawAngle = fract(atan(eclVec.x, eclVec.y) * 0.15915494309189535); // /(2*pi)
+      //  (b) QUINTIC COMPLETION CURVE. Ease the wrap-aware remaining gap between
+      //      the eased angle and the native target through a smootherstep. At
+      //      the start of a big jump (gap ~ a half-turn) the curve's slope is 0,
+      //      so the glide eases IN with no initial jerk; as the gap shrinks the
+      //      shaped gap decays like 10*g^3, so the glide eases OUT and LANDS --
+      //      the asymptotic exponential tail that read as "stuck, then suddenly
+      //      done" is gone. In steady play the smoothing lag is ~0.003 of a
+      //      turn -> the shaped offset is < 1e-6: native time, exactly as if the
+      //      system were off.
+      float eclDelta  = fract(eclRawAngle - sunAngle + 0.5) - 0.5; // [-0.5, 0.5)
+      float eclGap    = min(abs(eclDelta) * 2.0, 1.0);             // 0..1 of a half-turn
+      float eclShaped = eclGap * eclGap * eclGap * (eclGap * (eclGap * 6.0 - 15.0) + 10.0);
+      float eclSunAngle = eclEnabled ? fract(sunAngle + sign(eclDelta) * eclShaped * 0.5)
+                                     : sunAngle;
+      // RV's own sunAngle -> timeAngle remap, applied to the shaped angle, so in
+      // steady state this equals blissNativeTimeAngle exactly.
       float eTAmin = fract(eclSunAngle - 0.033333333);
       float eTAlin = eTAmin < 0.433333333 ? eTAmin * 1.15384615385 : eTAmin * 0.882352941176 + 0.117647058824;
       float eHA    = eTAlin > 0.5 ? 1.0 : 0.0;
@@ -848,11 +890,10 @@
       float eTAfrs = eTAfrc * eTAfrc * (3.0 - 2.0 * eTAfrc);
       float eTAmix = eHA < 0.5 ? 0.3 : -0.1;
       float eclEasedTimeAngle = (eTAfrc * (1.0 - eTAmix) + eTAfrs * eTAmix + eHA) * 0.5;
-      bool eclActive = eclEnabled && (eclMag > 0.01);
-      float timeAngle = eclActive ? eclEasedTimeAngle : blissNativeTimeAngle;
-      // Cloud clock rides the eased visual angle so clouds warp WITH the sun at
-      // exactly the slider-selected speed.
-      float blissCloudTimeBase = eclActive
+      float timeAngle = eclEnabled ? eclEasedTimeAngle : blissNativeTimeAngle;
+      // Cloud clock rides the SAME shaped angle with no runtime selector, so it
+      // can never flip clocks mid-transition (that flip was part of the hitch).
+      float blissCloudTimeBase = eclEnabled
           ? (mod(worldDay, 100) * 24000.0 + eclSunAngle * 24000.0)
           : (worldTime + mod(worldDay, 100) * 24000.0);
     #else

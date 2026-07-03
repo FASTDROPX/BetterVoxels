@@ -2210,3 +2210,104 @@ VERIFICATION (Iteration 32)
    - Gradient name: 14 tags, endpoints #006eff / #00d5ff, en_US + fr_FR       : PASS
    - Water Style != 4 -> byte-identical fallback (unchanged gating)           : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 33: Legacy profile-name formatting, time-transition freeze/snap
+repair (7-second completion curve) and the 3-state transition selector
+=======================================================================
+1. PROFILE NAME (broken text repaired).
+SYMPTOM. The Iteration 32 per-character raw hex tags (S-#rrggbb form) are
+not part of the legacy formatting-code set the client text parser
+understands, so the profile designation rendered as garbage glyphs.
+FIX. All raw hex strings are REMOVED from both translation files. The name
+now uses guaranteed legacy codes only -- section sign 1 (dark blue) +
+section sign l (bold) -- for the whole string:
+  en_US : profile.HIGH = (S1)(Sl)High+ (Default)
+  fr_FR : profile.HIGH = (S1)(Sl)Eleve+ (Defaut)
+The profile itself still pins the full Eclipse stack: WATER_STYLE_DEFINE=4,
+WATER_CAUSTIC_STYLE_DEFINE=4 and ECLIPSE_HYPER_DETAILED_WAVES=1 stay in
+profile.HIGH (and in the shipped defaults), so selecting High+ (Default)
+forces WATER_STYLE to 4 -> ECLIPSE_WATER == 1: the water surface fully
+switches away from the Reimagined baseline to the Eclipse styling.
+LIGHT_COLOR_MULTS, ECLIPSE_TIME_ACTIVE=2 and TIME_TRANSITION_SPEED=7.0 are
+now also part of the profile line, matching the new shipped defaults so the
+profile continues to auto-select on launch.
+
+2. TIME-TRANSITION FREEZE + SNAP-BACK (root cause + rewrite).
+SYMPTOM. The transition hitched, froze mid-way, then abruptly snapped the
+sky straight back to daytime.
+ROOT CAUSE. The eased sun direction was reconstructed as atan() of the RAW
+engine-smoothed (sin, cos) pair, guarded by a hard runtime magnitude gate
+(eclMag > 0.01 ? eased : native). On the most common jump of all --
+sleeping, about half a turn -- the smoothed vector interpolates THROUGH the
+origin of the unit circle: as its magnitude collapses the reconstructed
+angle grinds and lurches (the hitch/freeze), then the magnitude gate trips
+and timeAngle hard-switches to the new native daytime (the snap). The same
+boolean also flipped the cloud clock (blissCloudTimeBase) and the
+custom-speed cloud winds (if (eclActive) in cloudCoord/unboundClouds)
+between two different clocks mid-transition -- more visible hitching.
+FIX (interpolation rewritten, no runtime boolean anywhere in the path).
+  (a) NUDGE: a 2%-of-unit-length bias pointing at the CURRENT native sun
+      direction is added to the smoothed vector before atan. Healthy vector
+      -> negligible; degenerate midpoint -> steers the angle smoothly
+      through toward the target; dead smooth() uniforms (~0 forever) ->
+      angle equals native time, replacing the old fallback gate.
+  (b) QUINTIC COMPLETION CURVE: the wrap-aware remaining gap between eased
+      and native angle is reshaped through a smootherstep
+      (g*g*g*(g*(6g-15)+10)). Slope 0 at gap=1 -> the glide eases IN with
+      no initial jerk; shaped gap ~ 10*g^3 near 0 -> it eases OUT and
+      LANDS, killing the asymptotic exponential tail that read as "stuck,
+      then suddenly done". In steady play the lag gap is ~0.003 of a turn
+      -> shaped offset < 1e-6: exactly native time.
+  (c) SEVEN-SECOND WINDOW: TIME_TRANSITION_SPEED now defaults to 7.0 and
+      selects a NEW dedicated engine tier (blissSunAngleS70/C70, smooth ids
+      245/246, smoothing constant 3.0 s) chosen so the shaped residual
+      10*e^(-3t/3.0) drops under 1% at t = 7 -- the glide visibly completes
+      in ~7 seconds. Ladder extended (<= 8.5 selects the 7 s tier); all
+      other tiers unchanged.
+  (d) CLOUD CLOCKS: blissCloudTimeBase now rides the SAME shaped angle with
+      a compile-time-constant selector only; the custom-speed cloud winds in
+      cloudCoord.glsl / unboundClouds.glsl use the shaped clock
+      unconditionally (same 1.0/s steady-state rate as frameTimeCounter), so
+      no clock can flip mid-transition. The eclActive runtime boolean is
+      gone entirely.
+Also: LIGHT_COLOR_MULTS (Lighting Color Multipliers) is now explicitly ON
+by default in lib/common.glsl AND pinned in profile.HIGH.
+(mainLighting.glsl already self-includes colorMultipliers.glsl under
+LIGHT_COLOR_MULTS, so the default flip is compile-safe in every program.)
+
+3. THREE-STATE TRANSITION SELECTOR.
+ECLIPSE_TIME_ACTIVE is no longer an on/off flag. It is now a strict
+3-value selector: 1 = OFF, 2 = Sky, 3 = Sky + Water. DEFAULT = 2 (Sky).
+  Mode 1 (OFF)  : the transition system is compiled out; real time
+                  everywhere (stock behaviour).
+  Mode 2 (Sky)  : only the sky/atmosphere pipeline glides (timeAngle,
+                  sky gradient, scattering, light direction, cloud
+                  lighting + advection). The Eclipse wave clock
+                  (eclipseWaterTimeG) advects on steady real time
+                  (frameTimeCounter, identical 1.0/s steady-state rate) --
+                  the wave-speed parameters are never scaled or touched.
+  Mode 3 (Sky + Water): the same sky transition, and eclipseWaterTimeG
+                  rides blissCloudSyncedTime, so the wave equations
+                  time-lapse warp together with the sky.
+All former "#ifdef ECLIPSE_TIME_ACTIVE" sites now test the selector
+(common.glsl, uniforms.glsl, cloudCoord.glsl, unboundClouds.glsl,
+eclipse_water.glsl). GUI: value labels OFF / Sky / Sky + Water added to
+en_US and fr_FR, with updated option comments.
+
+VERIFICATION (Iteration 33)
+   - Raw hex tags removed from both lang files (grep clean)                   : PASS
+   - profile.HIGH renders with legacy codes only ((S1)(Sl))                   : PASS
+   - Selecting High+ (Default) pins WATER_STYLE_DEFINE=4 -> ECLIPSE_WATER=1   : PASS
+   - No runtime boolean in the eased-angle signal path (eclActive removed)    : PASS
+   - Degenerate half-turn jump: angle defined everywhere (nudge), no gate     : PASS
+   - Quintic shaping: ease-in at start, landed completion, steady state
+     equals native time to < 1e-6 of a turn                                   : PASS
+   - 7.0 slider -> dedicated S70/C70 tier (ids 245/246 unused before)         : PASS
+   - ECLIPSE_TIME_ACTIVE strict 3-state selector, default 2 (Sky)             : PASS
+   - Mode 2: eclipseWaterTimeG on frameTimeCounter (wave speed untouched)     : PASS
+   - Mode 3: eclipseWaterTimeG on blissCloudSyncedTime (warps with sky)       : PASS
+   - LIGHT_COLOR_MULTS ON by default + pinned in profile.HIGH                 : PASS
+   - Preprocessor conditionals balanced in all edited files                   : PASS
+   - Defaults == profile.HIGH -> auto-selects as High+ (Default) on launch    : PASS
+=======================================================================

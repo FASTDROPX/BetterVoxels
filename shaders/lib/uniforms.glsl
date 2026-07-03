@@ -153,18 +153,21 @@ uniform float frameTimeSmooth;
 uniform float eyeBrightnessM;
 uniform float eyeBrightnessM2;
 uniform float rainFactor;
-#ifdef ECLIPSE_TIME_ACTIVE
-// Eclipse global cinematic time (Iteration 14 base / Iteration 23): engine-
-// smoothed sin/cos of the celestial angle at SEVEN pre-baked fade tiers
-// (0.4/0.8/1.2/2.0/3.0/5.0/10.0 s). common.glsl selects the pair matching the
-// TIME_TRANSITION_SPEED slider so the GUI speed control is live. Maintained by
-// Iris across frames -- no fragile feedback buffer.
+#if ECLIPSE_TIME_ACTIVE >= 2
+// Eclipse global cinematic time (Iteration 14 base / Iteration 23 / Iteration
+// 33): engine-smoothed sin/cos of the celestial angle at EIGHT pre-baked fade
+// tiers (0.4/0.8/1.2/2.0/3.0/5.0 s, the dedicated 7-second-completion tier and
+// 10.0 s). common.glsl selects the pair matching the TIME_TRANSITION_SPEED
+// slider so the GUI speed control is live. Maintained by Iris across frames --
+// no fragile feedback buffer. Only compiled while the transition selector is
+// 2 (Sky) or 3 (Sky + Water).
 uniform float blissSunAngleS04;  uniform float blissSunAngleC04;
 uniform float blissSunAngleS08;  uniform float blissSunAngleC08;
 uniform float blissSunAngleS12;  uniform float blissSunAngleC12;
 uniform float blissSunAngleS20;  uniform float blissSunAngleC20;
 uniform float blissSunAngleS30;  uniform float blissSunAngleC30;
 uniform float blissSunAngleS50;  uniform float blissSunAngleC50;
+uniform float blissSunAngleS70;  uniform float blissSunAngleC70;
 uniform float blissSunAngleS100; uniform float blissSunAngleC100;
 #endif
 uniform float inBasaltDeltas;

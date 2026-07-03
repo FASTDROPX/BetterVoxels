@@ -22,11 +22,16 @@
             float wind = blissCloudSyncedTime;
         #else
             #define CLOUD_SPEED_MULT_M CLOUD_SPEED_MULT * 0.01
-            float wind = frameTimeCounter * CLOUD_SPEED_MULT_M;
-            #ifdef ECLIPSE_TIME_ACTIVE
-                // Custom cloud speed stays real-time (frameTimeCounter) normally,
-                // but warps onto the eased world-visual clock during a transition.
-                if (eclActive) wind = blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
+            #if ECLIPSE_TIME_ACTIVE >= 2
+                // Iteration 33: custom cloud speed rides the shaped visual clock
+                // UNCONDITIONALLY -- in steady state it advances at the same
+                // 1.0/s rate as frameTimeCounter and warps only during a jump.
+                // The old runtime "if (eclActive)" could flip between the two
+                // clocks mid-transition on a near-half-turn jump, snapping the
+                // cloud field -- part of the reported transition hitch.
+                float wind = blissCloudSyncedTime * (CLOUD_SPEED_MULT * 0.01);
+            #else
+                float wind = frameTimeCounter * CLOUD_SPEED_MULT_M;
             #endif
         #endif
         tracePos.x += wind;

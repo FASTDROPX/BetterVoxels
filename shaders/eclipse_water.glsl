@@ -27,10 +27,11 @@
 //  RV integration rules: pure ALU (no texture wave taps, no SSBOs, no image
 //  ops, no new uniforms/buffers) -> compiles under #version 130 (composite)
 //  and 430 compatibility (gbuffers_water / shadow); bufferObject.0 and every
-//  RV binding untouched. All advection runs on eclipseWaterTimeG, derived from
-//  blissCloudSyncedTime (lib/common.glsl), so the waves fast-forward with the
-//  sun/clouds during an ECLIPSE_TIME_ACTIVE transition and otherwise drift at
-//  the normal rate. Every symbol is "eclipse/Eclipse"-prefixed and verified
+//  RV binding untouched. All advection runs on eclipseWaterTimeG: with the
+//  time-transition selector at 3 (Sky + Water) it rides blissCloudSyncedTime
+//  (lib/common.glsl) and fast-forwards with the sun/clouds on a transition; at
+//  1 (OFF) or 2 (Sky) it runs on steady real time at the identical 1.0/s
+//  steady-state rate. Every symbol is "eclipse/Eclipse"-prefixed and verified
 //  collision-free. Include only from the top level of a program.
 // =============================================================================
 #ifndef INCLUDE_ECLIPSE_WATER
@@ -73,9 +74,18 @@ const vec2 eclipseWaveSizes[3] = vec2[](
 // Golden-angle octave rotation (Eclipse "radiance" constant).
 const float eclipseRadiance = 2.39996;
 
-// Unified advection clock: Eclipse used frameTimeCounter; here the waves ride
-// the smooth visual clock so they fast-forward with the sky on a time jump.
-float eclipseWaterTimeG = blissCloudSyncedTime * ECLIPSE_WATER_WAVE_SPEED;
+// Unified advection clock -- Iteration 33: driven by the time-transition mode.
+//   Mode 3 (Sky + Water): the waves ride the shaped visual clock, so the wave
+//     equations time-lapse warp together with the sky during a transition.
+//   Mode 1 (OFF) / Mode 2 (Sky): the waves advect on the steady real-time
+//     clock. frameTimeCounter advances at the same 1.0/s rate the synced clock
+//     has in steady state, so the wave speed is identical -- but the sky
+//     transition can never scale or touch it.
+#if ECLIPSE_TIME_ACTIVE >= 3
+    float eclipseWaterTimeG = blissCloudSyncedTime * ECLIPSE_WATER_WAVE_SPEED;
+#else
+    float eclipseWaterTimeG = frameTimeCounter * ECLIPSE_WATER_WAVE_SPEED;
+#endif
 
 mat2 EclipseRotationMatrix() {
     return mat2(vec2(cos(eclipseRadiance), -sin(eclipseRadiance)),
