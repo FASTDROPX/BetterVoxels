@@ -2082,3 +2082,51 @@ VERIFICATION (Iteration 30)
    - all additions typed + function-scoped; no global bare assignments          : PASS
    - Water Style != Eclipse -> byte-identical fallback (unchanged gating)        : PASS
 =======================================================================
+
+
+=======================================================================
+DEBUG ITERATION 31: Fix "colorP not found" in the entities/hand translucent
+pass (scope-guard the Eclipse base colour)
+=======================================================================
+SYMPTOM. Iris compile error: colorP undefined at entities_alpha.fsh line 1156
+(the flattened entities translucent program). Selecting Water Style 4 (Eclipse)
+triggered it.
+
+ROOT CAUSE. water.glsl is shared by several translucent programs (the water
+surface pass, DH water, AND the entities / hand translucent passes via
+translucentMaterials.glsl). colorP -- the raw texture sample -- only exists in
+the water-surface passes; gbuffers_water declares `vec4 colorP = texture2D(tex,
+texCoord);`, but the entities/hand includes do not. RV's own Step-1 code only
+reads colorP inside the `#if WATER_STYLE < 3` branch, which is dead when the
+style is >= 3, so stock RV never references colorP in those passes. The
+Iteration-29 Eclipse base-colour block added `colorPM = pow2(colorP.rgb)` to the
+>= 3 path UNCONDITIONALLY, so with Water Style 4 the entities pass now referenced
+a colorP that isn't declared there.
+
+FIX. Guard the Eclipse base-colour block to the surface pass where colorP is
+defined:  #if ECLIPSE_WATER == 1  ->  #if ECLIPSE_WATER == 1 && defined
+GBUFFERS_WATER. colorP is NOT deleted -- it is simply used only where it is
+declared, matching every other Eclipse water block (the Step-2 normal takeover,
+the Step-3 crest foam and the Step-4 specular are all already GBUFFERS_WATER
+gated; the Step-3 absorption only touches color.rgb / waterFog and is pass-safe).
+In the entities/hand path the block is skipped and colorPM falls back to the
+stock vec3(0.25), so nothing references an undefined symbol. This was the only
+unguarded colorP reference introduced by the Eclipse work.
+
+WATER STYLE 4 LOOK (unchanged, now that it compiles). In the visible water
+surface pass the full Eclipse optical stack renders: naturalistic base colour +
+per-channel Beer-Lambert absorption (deep-ocean blue-green), sharp sun specular,
+wave-crest foam, wave-slope refraction, and the wave-normal-focused caustics on
+the seafloor (Iteration 30). Water Style != 4 stays byte-identical.
+
+SCOPE SAFETY. Change is a preprocessor guard only; no new variables, no global
+statements, nothing deleted.
+
+VERIFICATION (Iteration 31)
+   - Eclipse base colour block gated to GBUFFERS_WATER (colorP defined there)     : PASS
+   - entities / hand translucent pass no longer references colorP                 : PASS
+   - colorP retained (not deleted); used only where declared                      : PASS
+   - all other Eclipse water blocks already pass-safe                             : PASS
+   - Water Style 4 surface optics (colour/absorption/specular/foam/caustics) intact: PASS
+   - Water Style != 4 -> byte-identical fallback                                  : PASS
+=======================================================================

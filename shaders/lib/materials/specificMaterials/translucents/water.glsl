@@ -25,11 +25,16 @@
         vec3 colorPM = vec3(0.25);
         color.rgb = 0.375 * glColorM;
     #endif
-    #if ECLIPSE_WATER == 1
-        // Iteration 29: Eclipse naturalistic base water. A brighter tropical tint
-        // from the biome water colour; the per-channel absorption curve (Step 3
-        // surface tint + the underwater fog in common.glsl) does the deep-ocean
-        // darkening, rather than starting from the flat dark stylised base.
+    #if ECLIPSE_WATER == 1 && defined GBUFFERS_WATER
+        // Iteration 29/31: Eclipse naturalistic base water. A brighter tropical
+        // tint from the biome water colour; the per-channel absorption curve
+        // (Step 3 surface tint + the underwater fog in common.glsl) does the
+        // deep-ocean darkening, rather than starting from the flat dark stylised
+        // base. GUARDED to GBUFFERS_WATER because colorP (the raw texture sample)
+        // only exists in the water surface pass -- the entities/hand translucent
+        // includes of this file do not declare it, so referencing colorP there
+        // was the "colorP not found" crash. colorP is untouched, just used only
+        // where it is defined (matching the other Eclipse water blocks).
         colorPM = pow2(colorP.rgb);
         color.rgb = colorPM * glColorM * vec3(0.70, 0.95, 1.10);
     #endif
