@@ -185,10 +185,11 @@
     // eclipseAdvanceTime, lib/misc/timeInterpolation.glsl): each frame it
     // closes 1 - exp(-dt / THIS_VALUE) of the remaining gap -- the fast,
     // organic start and gentle asymptotic landing of the build that felt
-    // perfect. Higher = slower, more cinematic. DEFAULT 7.0.
+    // perfect. Higher = slower, more cinematic. DEFAULT 0.6 (Iteration 38):
+    // a quick, responsive glide out of the box.
     // 0.0 == OFF (Instant): time snaps like vanilla.
     // Only has any effect while ECLIPSE_TIME_ACTIVE is 2 (Sky) or 3 (Sky+Water).
-    #define TIME_TRANSITION_SPEED 7.0 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
+    #define TIME_TRANSITION_SPEED 0.6 //[0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.5 3.0 4.0 5.0 7.0 10.0]
     // Eclipse-style GLOBAL cinematic smooth time (Performance screen).
     // Iteration 33: a strict THREE-STATE selector, default 2:
     //   1 = OFF          : real time everywhere; the transition system is

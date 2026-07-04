@@ -430,7 +430,7 @@ option.CLOUD_SPEED_MULT=Cloud Speed
 option.CLOUD_SPEED_MULT.comment=Determines how fast the clouds are going to move. "Synced to World Time" setting uses Minecraft world time to advance the cloud positions; this allows for clouds to appear the same between players in the same server. §e[*]§r This setting only works with the "Reimagined" or "Unbound" Cloud Styles.
 value.CLOUD_SPEED_MULT.100=Synced to World Time
 option.TIME_TRANSITION_SPEED=Time Transition Speed
-option.TIME_TRANSITION_SPEED.comment=Speed of the Eclipse time-transition glide (in seconds -- the exponential time constant). §e[*]§r The transition runs on the pack's own tracker with the classic organic exponential curve: a lively start that eases into a gentle landing, restarting fresh on every detected jump so the 1st, 2nd and 100th jump feel identical. Higher values give a slower, more cinematic glide. §e[*]§r Default: 7.0. §e[*]§r 0.0 = OFF (Instant): time snaps like vanilla. §e[*]§r Only has any effect while §aEclipse Time Transition§r is set to Sky or Sky + Water.
+option.TIME_TRANSITION_SPEED.comment=Speed of the Eclipse time-transition glide (in seconds -- the exponential time constant). §e[*]§r The transition runs on the pack's own tracker with the classic organic exponential curve: a lively start that eases into a gentle landing, restarting fresh on every detected jump so the 1st, 2nd and 100th jump feel identical. Higher values give a slower, more cinematic glide. §e[*]§r Default: 0.6. §e[*]§r 0.0 = OFF (Instant): time snaps like vanilla. §e[*]§r Only has any effect while §aEclipse Time Transition§r is set to Sky or Sky + Water.
 value.TIME_TRANSITION_SPEED.0.0=OFF (Instant)
 
 screen.ECLIPSE_WATER_SETTINGS=Eclipse Water Settings

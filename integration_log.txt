@@ -2591,3 +2591,57 @@ VERIFICATION (Iteration 37)
    - Iteration 34-36 configs, profiles, lang names, selector intact         : PASS
    - Preprocessor balance OK                                                : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 38: Default transition speed 0.6 + the star field bound to the
+tracked visual clock
+=======================================================================
+1. DEFAULT TRANSITION SPEED = 0.6.
+TIME_TRANSITION_SPEED now ships at 0.6 (was 7.0): a quick, responsive
+exponential glide out of the box (0.6 is the curve's time constant; the
+value was already in the option's value list, so the GUI slider shows it
+natively). profile.HIGH pins the same 0.6, keeping the profile equal to
+the shipped defaults so "High+ (Default)" still auto-selects on first
+launch. Option comment and both lang descriptions updated.
+
+2. STAR FIELD ON THE VISUAL CLOCK.
+ROOT CAUSE OF THE STAR SNAP. The star-field transformation in
+lib/atmospherics/stars.glsl (GetStarCoord -- the coordinate drift that
+rotates the night sky, consumed by gbuffers_skybasic, the water/DH-water
+sky reflections and the night nebula) advanced on RAW syncedTime, i.e.
+worldTime directly: on a /time set or bed sleep the stars snapped to the
+new rotation while the tracked sun, sky gradient and clouds glided.
+FIX. GetStarCoord now advances on blissCloudSyncedTime -- the clock
+derived from the eclipseTimeTracker visual angle (Iteration 36/37). The
+stars therefore glide, accelerate and settle on the EXACT same Iteration
+31 exponential curve as the sun and sky, in the same frame-consistent
+timeline (identical value to raw syncedTime whenever the transition
+selector is OFF, so mode 1 stays byte-identical). The night nebula's own
+gas-morph clock (nightNebula.glsl TIME) got the same one-word binding so
+the nebula morphs in lock-step with its own star backdrop during a warp.
+The aurora was deliberately left untouched (weather-gated feature, not
+part of the star-field transformation).
+
+3. ITERATION 37 BASE PRESERVED (verified -- the tracker module diff is
+ZERO lines). The Iteration 31 exponential decay math inside
+lib/misc/eclipseTimeTracker.glsl, the persistent image state, the
+shadowcomp.csh compute writer, the 0.004-turn delta-trigger, all
+voxel/GI/path-tracing/shadow parameters (GI_SAMPLE_COUNT=13,
+GI_STRENGTH=2, MAX_TRACE_COUNT=256, SDF_UPDATE_INTERVAL=0, volumes) and
+the water/caustic style-4 stack are byte-identical to Iteration 37.
+
+4. CONTROLS AND FORMATTING KEPT. (S1)(Sl)High+ (Default) / (S1)(Sl)
+Eleve+ (Defaut) legacy-code names intact (both lang files raw-hex-free);
+ECLIPSE_TIME_ACTIVE remains the strict //[1 2 3] selector, default 2
+(Sky): mode 2 never touches the wave clock, mode 3 warps it with the sky.
+
+VERIFICATION (Iteration 38)
+   - TIME_TRANSITION_SPEED default 0.6 (define + profile.HIGH pin match)     : PASS
+   - GetStarCoord drift on blissCloudSyncedTime (tracked visual clock)       : PASS
+   - Night nebula TIME on the same clock (lock-step with its stars)          : PASS
+   - Selector OFF -> blissCloudSyncedTime == raw syncedTime (byte-identical) : PASS
+   - common.glsl precedes stars.glsl in every consumer (symbol in scope)     : PASS
+   - eclipseTimeTracker.glsl diff = 0 lines (Iteration 37 math untouched)    : PASS
+   - Voxel/GI/path-tracing/shadow configs identical to Iterations 34-37      : PASS
+   - Legacy (S1)(Sl) profile name + 3-state selector default 2 intact        : PASS
+=======================================================================

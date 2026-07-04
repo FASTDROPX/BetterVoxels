@@ -7,7 +7,13 @@ float GetStarNoise(vec2 pos) {
 vec2 GetStarCoord(vec3 viewPos, float sphereness) {
     vec3 wpos = normalize((gbufferModelViewInverse * vec4(viewPos * 1000.0, 1.0)).xyz);
     vec3 starCoord = wpos / (wpos.y + length(wpos.xz) * sphereness);
-    starCoord.x += 0.006 * syncedTime;
+    // Iteration 38: the star-field rotation is bound to the TRACKED visual
+    // clock (blissCloudSyncedTime rides the eclipseTimeTracker visual angle;
+    // it equals raw syncedTime whenever the Eclipse time transition is off).
+    // On a time jump the stars now glide, accelerate and settle on the exact
+    // same Iteration 31 exponential curve as the sun, sky and clouds instead
+    // of snapping with raw world time.
+    starCoord.x += 0.006 * blissCloudSyncedTime;
     return starCoord.xz;
 }
 
