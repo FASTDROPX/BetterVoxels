@@ -2906,3 +2906,60 @@ BodyCam shaders"; archive name (S1)(Sl)Better(Sf)(Sl)Voxels(Sf)(Sl).zip;
 Iteration 38 base (tracker, exponential transition, star rotation,
 voxel configs) untouched.
 =======================================================================
+
+=======================================================================
+ITERATION 41: Screen water droplets on resurfacing (Bliss port)
+=======================================================================
+Ported the WATER_ON_CAMERA_EFFECT gameplay effect from Bliss v2.1.2 (by
+Xonk, Chocapic13 edit; lib/gameplay_effects.glsl) into the pack's
+isolated final-pass camera chain as lib/post/screenDroplets.glsl.
+
+1. CAMERA-MENU TOGGLE, DEFAULT ON. New boolean option WATER_DROPLETS
+(plain #define, shipped enabled) placed in screen.CAMERA_SETTINGS next
+to Underwater Distortion. en_US + fr_FR option text and tooltips added.
+
+2. THE RESURFACING MATH, PORTED LINE-FOR-LINE.
+  - TIMER: Bliss's exact mechanism -- uniform.float.exitWater =
+    smooth(247, if(isEyeInWater == 1, 1, 0), 0.0, 5.0): latches to 1
+    instantly while submerged, decays over 5 seconds the moment
+    isEyeInWater flips 1 -> 0. Gated behind #ifdef WATER_DROPLETS in
+    shaders.properties; id 247 verified unused.
+  - DROPLET FIELD: Bliss samples its 512x512 SMOOTH value-noise texture;
+    RV's noisetex is a different non-smooth 128x128 texture (documented
+    since the Iteration 26 noise bridge), so the port generates the same
+    smooth field procedurally -- quintic value noise at the established
+    512/20 cells-per-tile calibration. Mask math is verbatim: underwater
+    a static soft wobble (drops^2 * 0.3); after resurfacing the field
+    stretches vertically with exitWater^2, SLIDES DOWN the screen as the
+    timer decays (the -exitWater vertical offset), and dries out through
+    the sqrt(min(max(...))) curve.
+  - REFRACTION: Bliss's center-zoom -- each drop scales the UV toward
+    screen center by its mask strength and re-samples the finished
+    frame (colortex3), replacing the color while exitWater > 0.01.
+  - PLACEMENT: last step of the BASE camera pipeline in final.glsl,
+    before the BodyCam/ASCII/CRT-VCR overlay stack, so drops refract
+    the clean Iteration 40 baseline and retro overlays render on top of
+    the wet lens.
+
+3. SYNTAX ISOLATION (the Iteration 40 lessons, applied). All helpers
+(wdHash12, wdNoise, ApplyWaterDroplets) are GLOBAL-scope functions; no
+arrays anywhere; no comment ends in a backslash (pack-wide sweep CLEAN).
+The Iteration 40 structural validator (include-flatten -> real C
+preprocessor -> brace balance + nested-function-definition checks) was
+re-run: defaults (droplets ON) PASS, droplets OFF PASS, droplets + ASCII
++ BodyCam + all 12 retro toggles simultaneously PASS.
+
+4. PRESERVED (verified). Credits/Special Thanks tooltips exactly as
+Iteration 40; voxel/GI/path-tracing parameters, exponential time
+tracker, star rotation binding, and every CRT/VCR/ASCII/BodyCam toggle
+untouched. Xonk -- the author of this effect -- is already named in
+Special Thanks.
+
+VERIFICATION (Iteration 41)
+   - exitWater timer identical to Bliss (instant rise, 5 s decay)        : PASS
+   - Mask/slide/dry-out/refraction math ported line-for-line             : PASS
+   - Toggle in the Camera screen, default ON                             : PASS
+   - Helpers global-scope, array-free, backslash-comment-free            : PASS
+   - Structural validation: 3 configurations all PASS                    : PASS
+   - Credits, perf configs, tracker, star rotation, retro stack intact   : PASS
+=======================================================================

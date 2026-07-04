@@ -1428,3 +1428,7 @@ option.PP_BC_NVG_R=NVG Rouge
 option.PP_BC_NVG_G=NVG Vert
 option.PP_BC_NVG_B=NVG Bleu
 option.PP_BC_NVG_GAIN=Gain de luminosité NVG
+
+#Iteration 41: gouttes d'eau à l'écran (port de Bliss, menu Caméra)
+option.WATER_DROPLETS=Gouttes d'eau
+option.WATER_DROPLETS.comment=Des gouttes d'eau s'accrochent à la caméra en sortant de l'eau, coulent le long de l'écran et réfractent l'image en séchant en quelques secondes ; sous l'eau, l'objectif ondule doucement. Porté depuis Bliss (par Xonk). §e[*]§r Activé par défaut.

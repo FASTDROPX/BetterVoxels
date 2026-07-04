@@ -1737,3 +1737,7 @@ option.PP_BC_NVG_R=NVG Red
 option.PP_BC_NVG_G=NVG Green
 option.PP_BC_NVG_B=NVG Blue
 option.PP_BC_NVG_GAIN=NVG Brightness Gain
+
+#Iteration 41: screen water droplets (Bliss port, Camera menu)
+option.WATER_DROPLETS=Water Droplets
+option.WATER_DROPLETS.comment=Water droplets cling to the camera when you leave water, running down the screen and refracting the image while they dry off over a few seconds; underwater the lens gets a soft wet wobble. Ported from Bliss (by Xonk). §e[*]§r ON by default.

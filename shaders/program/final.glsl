@@ -82,6 +82,8 @@ noperspective in vec2 texCoord;
 #include "/lib/post/retroVcr.glsl"
 #include "/lib/post/asciiMode.glsl"
 #include "/lib/post/bodyCam.glsl"
+// Iteration 41: Bliss water-droplets-on-camera port (Camera menu toggle).
+#include "/lib/post/screenDroplets.glsl"
 
 //Program//
 void main() {
@@ -152,6 +154,14 @@ void main() {
         vec2 texCoordMin = texCoordM.xy - 0.5;
         float vignette = 1.0 - dot(texCoordMin, texCoordMin) * (1.0 - GetLuminance(color));
         color *= vignette;
+    #endif
+
+    // Iteration 41: screen water droplets (Bliss port) -- the last step of
+    // the BASE camera pipeline, so the resurfacing drops refract the clean
+    // Iteration 40 baseline and any retro overlays render on top of the wet
+    // lens. Self-disables whenever the exitWater timer is at rest.
+    #ifdef WATER_DROPLETS
+        color = ApplyWaterDroplets(color, colortex3, texCoordM);
     #endif
 
     // Iteration 39/40: retro overlay injection -- the absolute end of the
