@@ -54,16 +54,18 @@ float ppHash(vec2 p, float t) {
 }
 #if PP_RETRO_COLOR_DEPTH == 1
     // CTRVCR bayer4x4 ordered dithering (COLOR_DITERING == 2 path).
+    // Iteration 40: array-free form (Iris's parser is strict about array
+    // syntax in the flattened final program, so the 4x4 Bayer matrix rows are
+    // packed into ivec4s and read with dynamic vector indexing). Values are
+    // identical to the source matrix.
     float ppDither4(vec2 p) {
         ivec2 ip = ivec2(mod(p * vec2(viewWidth, viewHeight), 4.0));
-        float bayer[16] = float[16](
-             0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
-            12.0/16.0,  4.0/16.0, 14.0/16.0,  6.0/16.0,
-             3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
-            15.0/16.0,  7.0/16.0, 13.0/16.0,  5.0/16.0
-        );
-        int index = ip.x + ip.y * 4;
-        return bayer[index];
+        ivec4 ppRow;
+        if (ip.y == 0)      ppRow = ivec4( 0,  8,  2, 10);
+        else if (ip.y == 1) ppRow = ivec4(12,  4, 14,  6);
+        else if (ip.y == 2) ppRow = ivec4( 3, 11,  1,  9);
+        else                ppRow = ivec4(15,  7, 13,  5);
+        return float(ppRow[ip.x]) / 16.0;
     }
 #endif
 

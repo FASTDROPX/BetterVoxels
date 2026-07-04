@@ -35,40 +35,42 @@
 
 #if PP_ASCII_MODE == 1
 
-// ---- Glyph tables, ported VERBATIM from ASCII Shader V1.2 ------------------
+// ---- Glyph tables, values ported VERBATIM from ASCII Shader V1.2 -----------
 // Luminance ramp: FULL @ ? O P o c i . (empty).
-// Iteration 40: rewritten from "int[8] f(...)" array-RETURN signatures to
-// out-parameter form. Array return types are valid GLSL, but Iris's ANTLR
-// parser rejects the "type[N] name(" function-signature production (the
-// reported missing-';'-at-'{' ParseCancellationException); sized-array
-// PARAMETERS and constructors parse fine and are already used elsewhere in
-// the pack, so the tables below are byte-identical -- only the plumbing
-// changed.
-void ppAsciiPattern(float luminance, out int pattern[8]) {
-    if (luminance > 0.9)      pattern = int[8](0xF8, 0xF8, 0xF8, 0xF8, 0xF8, 0x00, 0x00, 0x00); // FULL
-    else if (luminance > 0.8) pattern = int[8](0x70, 0x90, 0x60, 0xB8, 0x88, 0x70, 0x00, 0x00); // @
-    else if (luminance > 0.7) pattern = int[8](0x20, 0x00, 0x38, 0x08, 0x70, 0x00, 0x00, 0x00); // ?
-    else if (luminance > 0.6) pattern = int[8](0xF0, 0x90, 0x90, 0x90, 0xF0, 0x00, 0x00, 0x00); // O
-    else if (luminance > 0.5) pattern = int[8](0x80, 0x80, 0xF0, 0x90, 0xF0, 0x00, 0x00, 0x00); // P
-    else if (luminance > 0.4) pattern = int[8](0x70, 0x50, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00); // o
-    else if (luminance > 0.3) pattern = int[8](0x70, 0x40, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00); // c
-    else if (luminance > 0.2) pattern = int[8](0x20, 0x20, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00); // i
-    else if (luminance > 0.1) pattern = int[8](0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00); // .
-    else                      pattern = int[8](0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00); // (empty)
+// Iteration 40 (final form): the glyph plumbing is now completely ARRAY-FREE.
+// Iris's ANTLR parser rejects array declarators in FUNCTION SIGNATURES (both
+// the original "int[8] f(...)" return form and the "out int p[8]" parameter
+// form raised the missing-';'-at-'{' ParseCancellationException at the same
+// spot), so the eight 8-bit row bitmasks of each glyph are packed into a pair
+// of ivec4s (rows 0-3 / rows 4-7) and read back with dynamic vector indexing
+// -- plain vector syntax that every GLSL frontend parses. The bitmask VALUES
+// are byte-identical to the source shader.
+void ppAsciiPattern(float luminance, out ivec4 rowsLo, out ivec4 rowsHi) {
+    if (luminance > 0.9)      { rowsLo = ivec4(0xF8, 0xF8, 0xF8, 0xF8); rowsHi = ivec4(0xF8, 0x00, 0x00, 0x00); } // FULL
+    else if (luminance > 0.8) { rowsLo = ivec4(0x70, 0x90, 0x60, 0xB8); rowsHi = ivec4(0x88, 0x70, 0x00, 0x00); } // @
+    else if (luminance > 0.7) { rowsLo = ivec4(0x20, 0x00, 0x38, 0x08); rowsHi = ivec4(0x70, 0x00, 0x00, 0x00); } // ?
+    else if (luminance > 0.6) { rowsLo = ivec4(0xF0, 0x90, 0x90, 0x90); rowsHi = ivec4(0xF0, 0x00, 0x00, 0x00); } // O
+    else if (luminance > 0.5) { rowsLo = ivec4(0x80, 0x80, 0xF0, 0x90); rowsHi = ivec4(0xF0, 0x00, 0x00, 0x00); } // P
+    else if (luminance > 0.4) { rowsLo = ivec4(0x70, 0x50, 0x70, 0x00); rowsHi = ivec4(0x00, 0x00, 0x00, 0x00); } // o
+    else if (luminance > 0.3) { rowsLo = ivec4(0x70, 0x40, 0x70, 0x00); rowsHi = ivec4(0x00, 0x00, 0x00, 0x00); } // c
+    else if (luminance > 0.2) { rowsLo = ivec4(0x20, 0x20, 0x00, 0x20); rowsHi = ivec4(0x00, 0x00, 0x00, 0x00); } // i
+    else if (luminance > 0.1) { rowsLo = ivec4(0x20, 0x00, 0x00, 0x00); rowsHi = ivec4(0x00, 0x00, 0x00, 0x00); } // .
+    else                      { rowsLo = ivec4(0x00, 0x00, 0x00, 0x00); rowsHi = ivec4(0x00, 0x00, 0x00, 0x00); } // (empty)
 }
 
 #if PP_ASCII_EDGE_GLYPHS == 1
     // Directional glyphs for edges (- / | \), by Sobel gradient angle.
-    void ppAsciiPatternAngle(float angle, out int pattern[8]) {
+    void ppAsciiPatternAngle(float angle, out ivec4 rowsLo, out ivec4 rowsHi) {
         float a = mod(angle, 6.2831853);
-        if (a < 0.3927 || a > 5.8905)        pattern = int[8](0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00); // |
-        else if (a < 1.1781)                 pattern = int[8](0x80, 0x40, 0x20, 0x10, 0x08, 0x00, 0x00, 0x00); // /
-        else if (a < 1.9635)                 pattern = int[8](0x00, 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00); // -
-        else if (a < 2.7489)                 pattern = int[8](0x08, 0x10, 0x20, 0x40, 0x80, 0x00, 0x00, 0x00); // \
-        else if (a < 3.5343)                 pattern = int[8](0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00); // |
-        else if (a < 4.3197)                 pattern = int[8](0x80, 0x40, 0x20, 0x10, 0x08, 0x00, 0x00, 0x00); // /
-        else if (a < 5.1051)                 pattern = int[8](0x00, 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00); // -
-        else                                 pattern = int[8](0x08, 0x10, 0x20, 0x40, 0x80, 0x00, 0x00, 0x00); // \
+        rowsHi = ivec4(0x00, 0x00, 0x00, 0x00);
+        if (a < 0.3927 || a > 5.8905)        { rowsLo = ivec4(0x20, 0x20, 0x20, 0x20); rowsHi.x = 0x20; } // |
+        else if (a < 1.1781)                 { rowsLo = ivec4(0x80, 0x40, 0x20, 0x10); rowsHi.x = 0x08; } // /
+        else if (a < 1.9635)                 { rowsLo = ivec4(0x00, 0x00, 0xF8, 0x00); }                  // -
+        else if (a < 2.7489)                 { rowsLo = ivec4(0x08, 0x10, 0x20, 0x40); rowsHi.x = 0x80; } // \
+        else if (a < 3.5343)                 { rowsLo = ivec4(0x20, 0x20, 0x20, 0x20); rowsHi.x = 0x20; } // |
+        else if (a < 4.3197)                 { rowsLo = ivec4(0x80, 0x40, 0x20, 0x10); rowsHi.x = 0x08; } // /
+        else if (a < 5.1051)                 { rowsLo = ivec4(0x00, 0x00, 0xF8, 0x00); }                  // -
+        else                                 { rowsLo = ivec4(0x08, 0x10, 0x20, 0x40); rowsHi.x = 0x80; } // \
     }
 #endif
 
@@ -98,29 +100,35 @@ vec3 ApplyAsciiMode(sampler2D src, vec2 uv) {
     float cellLuma = ppAsciiCellLuma(src, cellOrigin, cellSize);
     cellLuma = clamp((cellLuma - 0.5) * (PP_ASCII_CONTRAST * 0.01) + 0.5, 0.0, 1.0);
 
-    int pattern[8];
+    ivec4 rowsLo = ivec4(0);
+    ivec4 rowsHi = ivec4(0);
     #if PP_ASCII_EDGE_GLYPHS == 1
         // Source Sobel over neighbouring cells (single-tap estimator per cell).
-        float ppL[9];
-        int ppIdx = 0;
+        // Array-free: the Sobel weights are accumulated directly in the loop
+        // (weight for gradX = gx * (2 when gy == 0 else 1), and symmetrically
+        // for gradY) -- identical result to the source's kernel matrices.
+        float gradX = 0.0;
+        float gradY = 0.0;
         for (int gy = -1; gy <= 1; gy++) {
             for (int gx = -1; gx <= 1; gx++) {
-                ppL[ppIdx++] = ppAsciiLuma(texture2D(src, cellOrigin + (vec2(gx, gy) + 0.5) * cellSize).rgb);
+                float ppL = ppAsciiLuma(texture2D(src, cellOrigin + (vec2(gx, gy) + 0.5) * cellSize).rgb);
+                gradX += ppL * float(gx) * (gy == 0 ? 2.0 : 1.0);
+                gradY += ppL * float(gy) * (gx == 0 ? 2.0 : 1.0);
             }
         }
-        float gradX = (ppL[2] + 2.0 * ppL[5] + ppL[8]) - (ppL[0] + 2.0 * ppL[3] + ppL[6]);
-        float gradY = (ppL[6] + 2.0 * ppL[7] + ppL[8]) - (ppL[0] + 2.0 * ppL[1] + ppL[2]);
         float magnitude = length(vec2(gradX, gradY));
-        if (magnitude < 0.4) ppAsciiPattern(cellLuma, pattern);
-        else ppAsciiPatternAngle(clamp(atan(gradY, gradX), 0.0, 6.2831853), pattern);
+        if (magnitude < 0.4) ppAsciiPattern(cellLuma, rowsLo, rowsHi);
+        else ppAsciiPatternAngle(clamp(atan(gradY, gradX), 0.0, 6.2831853), rowsLo, rowsHi);
     #else
-        ppAsciiPattern(cellLuma, pattern);
+        ppAsciiPattern(cellLuma, rowsLo, rowsHi);
     #endif
 
-    // Position inside the character cell, mapped onto the 8x8 bitmask.
+    // Position inside the character cell, mapped onto the 8x8 bitmask
+    // (dynamic vector indexing picks the row from the ivec4 pair).
     vec2 cellPos = mod(uv / cellSize, vec2(1.0));
     ivec2 px = ivec2(floor(cellPos * 8.0));
-    bool litUp = (pattern[px.y] & (1 << (7 - px.x))) != 0;
+    int rowBits = px.y < 4 ? rowsLo[px.y] : rowsHi[px.y - 4];
+    bool litUp = (rowBits & (1 << (7 - px.x))) != 0;
     if (cellLuma < 0.1) litUp = false;
 
     if (litUp) {

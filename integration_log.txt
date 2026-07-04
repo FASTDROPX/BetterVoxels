@@ -2791,3 +2791,59 @@ VERIFICATION (Iteration 40)
    - Injection confined to final.glsl; identity when toggles OFF         : PASS
    - Preprocessor balance OK in all edited files                         : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 40 -- REVISION 2: The ASCII parse error, actually eliminated
+(array-free glyph machinery) + no-space archive name
+=======================================================================
+SYMPTOM. The missing-';'-at-'{' ParseCancellationException moved from
+flattened line 2651 to 2658 -- exactly the number of lines Revision 1
+inserted above the same spot. Conclusion: the Revision 1 fix traded one
+rejected construct for another. Iris's ANTLR grammar rejects ARRAY
+DECLARATORS IN FUNCTION SIGNATURES altogether: the original
+"int[8] f(...)" array-return form AND the replacement "out int p[8]"
+array-parameter form both fail at the same grammar production. (Array
+constructors and type-first array locals parse fine -- the pack's own
+interactive-water "vec3[4](...)" and shadowcomp "float[8]" compile --
+which is why only the ASCII block, compiled when the toggle is switched
+ON, ever tripped it. That also explains the observed behaviour: the
+retro filters work, and the crash appears the moment ASCII Mode is
+enabled.)
+
+FIX (array-free, bulletproof against the grammar gap).
+  - Each glyph's eight 8-bit row bitmasks are packed into a PAIR OF
+    ivec4s (rows 0-3 / rows 4-7), passed as plain "out ivec4" parameters
+    and read back with dynamic vector indexing (rowsLo[y] / rowsHi[y-4])
+    -- no array type appears in any signature, declaration or
+    constructor. Bitmask VALUES remain byte-identical to ASCII Shader
+    V1.2.
+  - The edge-glyph Sobel no longer stores samples in a float[9]: the
+    kernel weights are accumulated directly in the loop
+    (w_x = gx * (2 if gy==0 else 1), symmetric for y) -- identical
+    result, zero arrays.
+  - Proactively, the CTRVCR Bayer-4x4 dither in retroVcr.glsl (gated
+    behind Retro Color Depth, the same latent risk) is rewritten the
+    same way: matrix rows as ivec4s + dynamic indexing.
+  - lib/post now contains NO array syntax at all (verified by grep).
+
+ARCHIVE NAME. Confirmed clean colorized form, now contiguous with no
+space before the extension, per the Iteration 40 spec update:
+    (S1)(Sl)Better(Sf)(Sl)Voxels(Sf)(Sl).zip
+(the real filename carries the section-sign characters).
+
+CARRIED FROM REVISION 1 (verified still in place): the complete BodyCam
+integration (26 parameters, exclusions, warning tooltip), the extended
+Credits ("BetterVoxels DEV: FastdropX" on top; Xonk + the CRT/VCR,
+ASCII and BodyCam creators in Special Thanks), and the untouched
+Iteration 38 base (tracker, exponential transition, 0.6 default, star
+rotation binding, voxel/GI/shadow parameters).
+
+VERIFICATION (Iteration 40 R2)
+   - No array declarators/constructors anywhere in lib/post (grep)      : PASS
+   - Glyph bitmask values identical to the source shader                : PASS
+   - Sobel loop-accumulated weights == source kernel matrices           : PASS
+   - Bayer matrix values identical to CTRVCR                            : PASS
+   - BodyCam, credits, warning tooltip unchanged from Revision 1        : PASS
+   - Archive renamed to the contiguous no-space colored form            : PASS
+   - Preprocessor balance OK                                            : PASS
+=======================================================================
