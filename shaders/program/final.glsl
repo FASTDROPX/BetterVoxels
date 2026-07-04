@@ -81,6 +81,7 @@ noperspective in vec2 texCoord;
 // bit-identical to Iteration 38.
 #include "/lib/post/retroVcr.glsl"
 #include "/lib/post/asciiMode.glsl"
+#include "/lib/post/bodyCam.glsl"
 
 //Program//
 void main() {
@@ -153,9 +154,14 @@ void main() {
         color *= vignette;
     #endif
 
-    // Iteration 39: retro overlay injection -- the absolute end of the
-    // pipeline. ASCII Mode first (it reconstructs the frame from the glyph
-    // matrix), then the CRT/VCR effects layer on top of the result.
+    // Iteration 39/40: retro overlay injection -- the absolute end of the
+    // pipeline. BodyCam first (it re-photographs the finished frame through
+    // its own lens mapping), then ASCII Mode (it reconstructs the frame from
+    // the glyph matrix), then the CRT/VCR effects layer on top of the result.
+    // Each stage is independently OFF by default and fully isolated.
+    #if PP_BODYCAM == 1
+        color = ApplyBodyCam(colortex3, texCoord);
+    #endif
     #if PP_ASCII_MODE == 1
         color = ApplyAsciiMode(colortex3, texCoordM);
     #endif

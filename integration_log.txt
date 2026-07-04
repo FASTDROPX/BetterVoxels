@@ -2716,3 +2716,78 @@ VERIFICATION (Iteration 39)
    - Dual-column layout (screen columns=2), ASCII sub-menu wired           : PASS
    - CTRVCR license: Apache-2.0 (attribution retained in module header)    : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 40: ASCII parse-crash fix, BodyCam integration, extended
+credits, clean colorized archive name
+=======================================================================
+1. ASCII SYNTAX CRASH (ANTLR "missing ';' at '{'", flattened line 2651).
+ROOT CAUSE. The Iteration 39 ASCII port declared its glyph tables as
+array-RETURNING functions ("int[8] ppAsciiPattern(...) {"). That is valid
+GLSL, but Iris's ANTLR grammar rejects the "type[N] name(" function-
+signature production -- the parser reads "int[8]" as an incomplete
+statement and reports the missing semicolon at the function's opening
+brace. Sized-array PARAMETERS and array constructors parse fine (both
+already used elsewhere in the pack: shadowcomp's float[8], water's
+vec3[4](...)).
+FIX. Both glyph functions rewritten to out-parameter form
+(void ppAsciiPattern(float, out int pattern[8])); the bitmask tables are
+byte-identical, only the plumbing changed. Call sites updated.
+
+2. BODYCAM MODE (new lib/post/bodyCam.glsl, from Body Camera Shader
+V1.6.1). Complete port of the source's final-pass camera chain as a
+fourth isolated overlay stage: forced 4:3 pillarbox with effect-space
+remap, zoom, procedural camera shake, fisheye distortion, chromatic
+aberration, 5-tap kernel sharpening, dynamic-range curve, the source's
+desaturating tonemap + cool sensor cast, scanline/grain/color-distortion
+artifacts, night vision (tint RGB + gain, optional sneak-only activation
+via the Iris isSneaking uniform), brightness/contrast, lens vignette
+with its paired soft side stripes, configurable black stripes, and the
+pillarbox bars. All 26 parameters mirror the source settings.glsl value
+lists and defaults; master toggle OFF by default.
+EXCLUDED on instruction: the "Hover over me" author option (BY) and the
+"RTX version" promotional toggle (PATREON). Excluded for isolation:
+source options that are full pipeline features RV already provides
+natively (PBR, SSR, shadows/shading, AO, waves, foliage, fog, motion
+blur, DOF, bloom, auto exposure, flashlight) or that need scene data /
+extra texture stages (its lens flare needs projected sun positions --
+RV ships its own lens flare; LUT/BIT need the source's LUT textures;
+TI lives in its lighting pass).
+WARNING TOOLTIP: the BodyCam master toggle's hover text ends with the
+requested notice: "It is highly recommended not to use this effect
+simultaneously with other post-processing options to avoid severe
+visual distortion and performance drops."
+Injection order in final.glsl: BodyCam (re-photographs the finished
+frame) -> ASCII -> CRT/VCR overlays. Each stage independent, identity
+when OFF.
+
+3. CREDITS EXTENDED (Information tab). The Credits tooltip now opens
+with "BetterVoxels DEV: FastdropX" (bold aqua, top of the tooltip), and
+the Special Thanks list inside the same tooltip now ends with:
+"Xonk (Eclipse transition), and the original creators of the CRT/VCR,
+ASCII, and BodyCam shaders." Applied to en_US and fr_FR.
+
+4. CLEAN ARCHIVE NAME. The build now packages as
+    (S1)(Sl)Better(Sf)(Sl)Voxels (Sf)(Sl).zip
+-- the obfuscated magic tag ((Sk)) and the leading exclamation mark are
+removed; the bold dark blue "Better" + bold white "Voxels" styling is
+kept, clean and contiguous. The Iteration 39 (Sk)-tagged archive is
+replaced by the new file in the tree.
+
+5. BASE PRESERVED (verified). Zero diff outside the post modules,
+final.glsl hooks, menu and lang: the eclipseTimeTracker, exponential
+transition math, 0.6 default speed, star clock binding, voxel/GI/shadow
+parameters, profile and all Iteration 39 CRT/VCR/ASCII features are
+untouched (the ASCII fix changed only function plumbing, tables intact).
+
+VERIFICATION (Iteration 40)
+   - No array-return function signatures remain in the pack              : PASS
+   - ASCII glyph tables byte-identical after the out-parameter rewrite   : PASS
+   - BodyCam: 26 parameters, source value lists/defaults mirrored        : PASS
+   - BY ("Hover over me") and PATREON ("RTX version") not ported         : PASS
+   - Warning tooltip present at the bottom of the BodyCam master hover   : PASS
+   - Screens/defines cross-check clean (programmatic)                    : PASS
+   - Credits: FastdropX at top; Xonk + retro shader creators in thanks   : PASS
+   - Injection confined to final.glsl; identity when toggles OFF         : PASS
+   - Preprocessor balance OK in all edited files                         : PASS
+=======================================================================
