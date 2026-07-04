@@ -75,6 +75,13 @@ noperspective in vec2 texCoord;
 #define WRITE_TO_SSBOS
 #include "/lib/vx/SSBOs.glsl"
 
+// Iteration 39: isolated retro post-processing overlay stack. Applied ONLY in
+// this final pass, strictly on the finalized frame buffer; with every toggle
+// OFF both entry points compile to the identity and the output is
+// bit-identical to Iteration 38.
+#include "/lib/post/retroVcr.glsl"
+#include "/lib/post/asciiMode.glsl"
+
 //Program//
 void main() {
     vec2 texCoordM = texCoord;
@@ -82,6 +89,12 @@ void main() {
     #ifdef UNDERWATER_DISTORTION
         if (isEyeInWater == 1)
             texCoordM += WATER_REFRACTION_INTENSITY * 0.00035 * sin((texCoord.x + texCoord.y) * 25.0 + frameTimeCounter * 3.0);
+    #endif
+
+    #if PP_CRT_CURVATURE == 1 || PP_VHS_TAPE_DISTORTION == 1 || PP_RETRO_PIXELATE == 1
+        // Iteration 39: UV-stage retro effects bend the fetch coordinate of the
+        // finalized frame (screen curvature, tape distortion, pixelation).
+        texCoordM = RetroPostUV(texCoordM);
     #endif
 
     vec3 color = texture2D(colortex3, texCoordM).rgb;
@@ -138,6 +151,16 @@ void main() {
         vec2 texCoordMin = texCoordM.xy - 0.5;
         float vignette = 1.0 - dot(texCoordMin, texCoordMin) * (1.0 - GetLuminance(color));
         color *= vignette;
+    #endif
+
+    // Iteration 39: retro overlay injection -- the absolute end of the
+    // pipeline. ASCII Mode first (it reconstructs the frame from the glyph
+    // matrix), then the CRT/VCR effects layer on top of the result.
+    #if PP_ASCII_MODE == 1
+        color = ApplyAsciiMode(colortex3, texCoordM);
+    #endif
+    #ifdef PP_RETRO_COLOR_STAGE
+        ApplyRetroVcr(color, colortex3, texCoordM, texCoord);
     #endif
 
     /* DRAWBUFFERS:0 */

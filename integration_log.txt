@@ -2645,3 +2645,74 @@ VERIFICATION (Iteration 38)
    - Voxel/GI/path-tracing/shadow configs identical to Iterations 34-37      : PASS
    - Legacy (S1)(Sl) profile name + 3-state selector default 2 intact        : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 39: Modular retro Post-Processing stack (CRT/VCR + ASCII Mode)
+=======================================================================
+Two external sources reviewed and integrated as a fully ISOLATED overlay:
+"CTRVCR" v1.4.4 (Apache License 2.0) and "ASCII Shader" V1.2.
+
+1. NEW "POST-PROCESSING" MENU CATEGORY.
+[POST_PROCESSING_SETTINGS] added to the main options screen, with
+screen...columns=2 for the dual-column layout. en_US + fr_FR entries for
+the tab, every toggle, every value label and the ASCII sub-menu.
+
+2. TWELVE INDEPENDENT RETRO TOGGLES (dual-column, strict OFF/ON).
+lib/post/retroVcr.glsl ports the CTRVCR effect stack with its default
+tuning baked in; each effect has its own strict two-state toggle,
+default OFF: Screen Curvature | Chromatic Aberration, Scanlines |
+VHS Noise, Vignette | Tape Distortion, Analog Glow | Tracking Lines,
+Pixelation | Film Grain, Retro Color Depth | Monochrome.
+NOTE on the toggle encoding: Iris/OptiFine option value lists are
+numeric, and GLSL preprocessor handling of bare true/false tokens is
+driver-dependent -- so the strict toggles are encoded as 0/1
+(//[0 1]) and MAPPED to OFF/ON via value labels in both lang files,
+which renders in the GUI exactly as requested.
+
+3. ISOLATED FINAL-PASS INJECTION.
+All retro logic lives in two new modules (lib/post/retroVcr.glsl,
+lib/post/asciiMode.glsl) included ONLY by program/final.glsl -- the
+absolute end of the pipeline -- and operating strictly on the finalized
+frame buffer (colortex3): a UV-stage hook bends the fetch coordinate
+(curvature / tape tear / pixelation) and a color-stage hook layers the
+remaining effects on the finished color. With every toggle OFF both
+hooks compile to the identity: the entire Iteration 38 pipeline (voxel
+lighting, shadows, reflections, tracker, perf settings) is byte-
+untouched -- the diff outside the two new files is final.glsl hooks +
+menu/lang text only.
+
+4. ASCII MODE + SUB-MENU.
+Master toggle PP_ASCII_MODE (OFF/ON). When ON, the final image is fully
+reconstructed from the source pack's procedural 8x8 character bitmask
+matrix (glyph ramp " . i c o P O ? @ FULL" ported verbatim, plus the
+Sobel-angle directional glyph table - / | \ for edges). Sub-menu
+parameters: Character Scale (cell px), Font Brightness, Contrast Boost,
+Color Mode (Mono White / Original Colors / Terminal Green / Amber),
+Edge Glyphs (OFF/ON), Background Brightness.
+
+5. ITERATION 38 BASE PRESERVED (verified). eclipseTimeTracker, the
+exponential transition math, the 0.6 default speed, the star-rotation
+clock binding, profile.HIGH and all voxel/GI/shadow/path-tracing
+parameters are untouched by the diff.
+
+6. COLORIZED PACKAGE NAME. The build ships as a zip whose FILENAME
+embeds the legacy formatting codes verbatim, so the Iris shader list
+renders it colored (obfuscated magic tag, bold dark blue "Better",
+bold white "Voxels"):
+    (S1)(Sl)(Sk)!(Sr) (S1)(Sl)Better(Sf)(Sl)Voxels (Sf)(Sl).zip
+((Sx) stands for the section-sign codes; the actual filename contains
+the real section-sign characters.) There is no internal pack-name field
+in the Iris shaders.properties format -- the zip filename IS the pack
+identifier, so the colored string lives there.
+
+VERIFICATION (Iteration 39)
+   - 12 toggles + ASCII master/sub-options: every screen entry has a
+     define and vice versa (cross-checked programmatically)                 : PASS
+   - All PP symbols pp/PP-prefixed; no collisions outside lib/post + final : PASS
+   - Both hooks identity when all toggles OFF (compile-time)               : PASS
+   - Injection confined to program/final.glsl (end of pipeline)            : PASS
+   - Preprocessor balance OK in both new modules + final.glsl              : PASS
+   - Iteration 38 core diff: zero lines outside final hooks/menu/lang      : PASS
+   - Dual-column layout (screen columns=2), ASCII sub-menu wired           : PASS
+   - CTRVCR license: Apache-2.0 (attribution retained in module header)    : PASS
+=======================================================================
