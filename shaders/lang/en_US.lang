@@ -1740,4 +1740,7 @@ option.PP_BC_NVG_GAIN=NVG Brightness Gain
 
 #Iteration 41: screen water droplets (Bliss port, Camera menu)
 option.WATER_DROPLETS=Water Droplets
-option.WATER_DROPLETS.comment=Water droplets cling to the camera when you leave water, running down the screen and refracting the image while they dry off over a few seconds; underwater the lens gets a soft wet wobble. Ported from Bliss (by Xonk). §e[*]§r ON by default.
+option.WATER_DROPLETS.comment=Water droplets cling to the camera the moment you leave water, running down the screen and refracting the image while they dry off over a few seconds, fading out seamlessly. Strictly a resurfacing effect -- nothing is distorted while you are underwater. Ported from Bliss (by Xonk). §e[*]§r ON by default.
+option.UNDERWATER_BLUR=Underwater Blur
+option.UNDERWATER_BLUR.comment=Blurs the scene while your eyes are underwater to simulate realistic low-visibility underwater optics. The slider sets the blur radius. §e[*]§r OFF by default.
+value.UNDERWATER_BLUR.0=OFF

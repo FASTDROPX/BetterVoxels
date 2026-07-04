@@ -5,8 +5,11 @@
 //  Chocapic13 edit -- lib/gameplay_effects.glsl, WATER_ON_CAMERA_EFFECT): when
 //  the eye leaves water (isEyeInWater flips 1 -> 0), droplets cling to the
 //  camera and run DOWN the screen while drying out over five seconds, each
-//  drop refracting the underlying image; underwater, the same mask gives the
-//  lens a soft wet wobble.
+//  drop refracting the underlying image. Iteration 42: the effect is
+//  RESURFACING-ONLY -- while submerged the distortion multiplier is forced
+//  to 0.0 (Bliss's underwater wobble branch is removed), and the refraction
+//  strength is attenuated linearly by the decaying timer for a seamless,
+//  pop-free fade-out.
 //
 //  STATE / TIMER. Exactly Bliss's mechanism: the engine-side smoothed uniform
 //      uniform.float.exitWater = smooth(247, if(isEyeInWater == 1, 1, 0), 0.0, 5.0)
@@ -61,24 +64,31 @@ float wdNoise(vec2 p) {
 #define WD_NOISE_RES (512.0 / 20.0)
 
 vec3 ApplyWaterDroplets(vec3 color, sampler2D src, vec2 uv) {
-    // Bliss gate: nothing runs once the camera has dried off.
-    if (exitWater <= 0.01) return color;
+    // Iteration 42: STRICTLY RESURFACING-ONLY. While submerged the droplet
+    // distortion multiplier is forced to 0.0 (Bliss's underwater lens wobble
+    // is removed entirely -- that submerged branch was the reported
+    // underwater screen distortion). The effect arms only when isEyeInWater
+    // flips 1 -> 0 and the exitWater timer starts decaying; and nothing runs
+    // once the camera has dried off.
+    if (isEyeInWater == 1 || exitWater <= 0.01) return color;
 
     float wdAspect = viewWidth / viewHeight;
 
-    // Ported line-for-line from applyGameplayEffects():
-    //  - underwater: a static, gentle full-lens wobble;
-    //  - after resurfacing: the field stretches vertically as it dries
-    //    (scale.y grows with exitWater^2) and SLIDES DOWN the screen
-    //    (the -scale.z offset shrinks with the timer), so the drops run
-    //    downward while thinning out.
-    vec3 wdScale = vec3(1.0, 1.0, 0.0);
-    wdScale.xy = (isEyeInWater == 1 ? vec2(0.3) : vec2(0.5, 0.25 + (exitWater * exitWater) * 0.25)) * vec2(wdAspect, 1.0);
-    wdScale.z = isEyeInWater == 1 ? 0.0 : exitWater;
+    // Resurfacing field, ported from applyGameplayEffects(): it stretches
+    // vertically as it dries (scale.y grows with exitWater^2) and SLIDES
+    // DOWN the screen (the -exitWater offset shrinks with the timer), so
+    // the drops run downward while thinning out.
+    vec2 wdScaleXY = vec2(0.5, 0.25 + (exitWater * exitWater) * 0.25) * vec2(wdAspect, 1.0);
+    float wdSlide = exitWater;
 
-    float waterDrops = wdNoise((uv - vec2(0.0, wdScale.z)) * wdScale.xy * WD_NOISE_RES);
-    if (isEyeInWater == 1) waterDrops = waterDrops * waterDrops * 0.3;
-    if (isEyeInWater == 0) waterDrops = sqrt(min(max(waterDrops - (1.0 - sqrt(exitWater)) * 0.7, 0.0) * (1.0 + exitWater), 1.0)) * 0.3;
+    float waterDrops = wdNoise((uv - vec2(0.0, wdSlide)) * wdScaleXY * WD_NOISE_RES);
+    waterDrops = sqrt(min(max(waterDrops - (1.0 - sqrt(exitWater)) * 0.7, 0.0) * (1.0 + exitWater), 1.0)) * 0.3;
+
+    // Iteration 42: SEAMLESS FADE-OUT. The refraction strength is attenuated
+    // linearly by the decaying timer itself, so the physical distortion has
+    // already reached imperceptibility by the time the 0.01 gate closes --
+    // no end-of-animation pop.
+    waterDrops *= exitWater;
 
     // Bliss refraction: every drop zooms the UV toward the screen center by
     // its mask strength and re-samples the finished frame.

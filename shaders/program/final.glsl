@@ -84,6 +84,8 @@ noperspective in vec2 texCoord;
 #include "/lib/post/bodyCam.glsl"
 // Iteration 41: Bliss water-droplets-on-camera port (Camera menu toggle).
 #include "/lib/post/screenDroplets.glsl"
+// Iteration 42: underwater low-visibility disc blur (Camera menu slider).
+#include "/lib/post/underwaterBlur.glsl"
 
 //Program//
 void main() {
@@ -156,10 +158,16 @@ void main() {
         color *= vignette;
     #endif
 
-    // Iteration 41: screen water droplets (Bliss port) -- the last step of
+    // Iteration 42: underwater blur (submerged only), then the resurfacing
+    // water droplets (surface only) -- mutually exclusive by construction.
+    #if UNDERWATER_BLUR > 0
+        color = ApplyUnderwaterBlur(color, colortex3, texCoordM);
+    #endif
+
+    // Iteration 41/42: screen water droplets (Bliss port) -- the last step of
     // the BASE camera pipeline, so the resurfacing drops refract the clean
     // Iteration 40 baseline and any retro overlays render on top of the wet
-    // lens. Self-disables whenever the exitWater timer is at rest.
+    // lens. Strictly resurfacing-only; self-disables once dried off.
     #ifdef WATER_DROPLETS
         color = ApplyWaterDroplets(color, colortex3, texCoordM);
     #endif

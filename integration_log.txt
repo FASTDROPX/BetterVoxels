@@ -2963,3 +2963,47 @@ VERIFICATION (Iteration 41)
    - Structural validation: 3 configurations all PASS                    : PASS
    - Credits, perf configs, tracker, star rotation, retro stack intact   : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 42: Droplets strictly resurfacing-only + seamless fade-out;
+new "Underwater Blur" Camera option
+=======================================================================
+1. UNDERWATER DROPLET DISTORTION ELIMINATED. Bliss's submerged branch
+(the "soft static lens wobble" documented in the Iteration 41 log) was
+the reported underwater screen distortion. lib/post/screenDroplets.glsl
+now forces the distortion multiplier to strictly 0.0 while
+isEyeInWater == 1 (early return, both underwater ternary branches
+removed): the effect arms ONLY when isEyeInWater flips 1 -> 0 and the
+exitWater timer starts decaying.
+
+2. SEAMLESS FADE-OUT. The refraction strength is now attenuated
+LINEARLY by the decaying timer itself (waterDrops *= exitWater) before
+the center-zoom UV is built, so the physical distortion reaches
+imperceptibility well before the 0.01 activity gate closes -- the
+end-of-animation pop is gone. Drying curve, slide motion and refraction
+otherwise unchanged from the Bliss port.
+
+3. NEW CAMERA OPTION: UNDERWATER BLUR (lib/post/underwaterBlur.glsl).
+While isEyeInWater == 1, a clean 12-tap golden-angle disc blur is
+applied over the finished frame for realistic low-visibility underwater
+optics. OFF by default (UNDERWATER_BLUR = 0); the Camera-tab slider
+sets the radius as integer percent of an ~8 px @1080p baseline (integer
+encoding because the GLSL preprocessor cannot compare float option
+values; 0 renders as OFF in the GUI). Registered in
+screen.CAMERA_SETTINGS next to Water Droplets and in the sliders list;
+en_US + fr_FR entries added. By construction the blur runs ONLY while
+submerged and the droplets ONLY after resurfacing -- the two effects
+can never overlap.
+
+4. BASE PRESERVED + VALIDATED. Credits tooltips byte-identical
+("BetterVoxels DEV: FastdropX" + Special Thanks); voxel/GI/path-tracing
+parameters, exponential time tracker, star rotation and the entire
+CRT/VCR/ASCII/BodyCam stack untouched. Helpers global-scope, array-free,
+backslash-comment sweep CLEAN. Structural validator (include-flatten ->
+real C preprocessor -> brace balance + nested-function checks) re-run:
+    defaults (droplets ON, blur OFF) ............ PASS
+    underwater blur 100% ........................ PASS
+    droplets OFF, blur max ...................... PASS
+    blur + droplets + ASCII + BodyCam + all 12
+    retro toggles simultaneously ................ PASS
+=======================================================================

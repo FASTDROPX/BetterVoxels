@@ -1431,4 +1431,7 @@ option.PP_BC_NVG_GAIN=Gain de luminosité NVG
 
 #Iteration 41: gouttes d'eau à l'écran (port de Bliss, menu Caméra)
 option.WATER_DROPLETS=Gouttes d'eau
-option.WATER_DROPLETS.comment=Des gouttes d'eau s'accrochent à la caméra en sortant de l'eau, coulent le long de l'écran et réfractent l'image en séchant en quelques secondes ; sous l'eau, l'objectif ondule doucement. Porté depuis Bliss (par Xonk). §e[*]§r Activé par défaut.
+option.WATER_DROPLETS.comment=Des gouttes d'eau s'accrochent à la caméra au moment où vous sortez de l'eau, coulent le long de l'écran et réfractent l'image en séchant en quelques secondes, avec un fondu sans à-coup. Effet strictement de sortie d'eau -- aucune distorsion sous l'eau. Porté depuis Bliss (par Xonk). §e[*]§r Activé par défaut.
+option.UNDERWATER_BLUR=Flou sous-marin
+option.UNDERWATER_BLUR.comment=Floute la scène lorsque les yeux sont sous l'eau pour simuler une visibilité réduite réaliste. Le curseur règle le rayon du flou. §e[*]§r Désactivé par défaut.
+value.UNDERWATER_BLUR.0=OFF
