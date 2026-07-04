@@ -2374,3 +2374,76 @@ VERIFICATION (Iteration 34)
    - Lang files free of raw hex tags; (S1)(Sl) legacy name renders            : PASS
    - Preprocessor conditionals balanced in all edited files                   : PASS
 =======================================================================
+
+=======================================================================
+ITERATION 35: Hard state flush on repeated time jumps (2nd-trigger freeze
+/ 3rd-trigger snap eliminated); everything else kept at Iteration 34
+=======================================================================
+SYMPTOM. Trigger 1 of the time transition was fluid, trigger 2 froze, and
+trigger 3 snapped instantly -- classic stale-state accumulation across
+back-to-back time commands.
+
+ROOT CAUSE (what the "accumulated stale state" physically is). The
+transition state lives in the Iris engine-side smooth() uniforms: an
+exponential moving average of the sun angle's (sin, cos). Every time jump
+drags that average across the INTERIOR of the unit circle. If a second
+command lands before the state has re-converged (|v| back to ~1), the
+leftover collapsed magnitude carries over -- the accumulation. The
+Iteration 31/34 hard gate (eclMag > 0.01 ? eased : native) converted that
+into the exact observed ladder: healthy state -> fluid glide (trigger 1);
+partially collapsed state -> the angle reconstruction lingers on a
+degenerate low-magnitude path (trigger 2's freeze); fully collapsed state
+-> the gate trips and hard-switches the sky (trigger 3's instant snap).
+
+FIX (hard flush by RE-BASING -- the calculation stays the lightweight
+Iteration 31 exponential-decay structure). GLSL cannot write the engine-
+side smooth() state, so the flush is implemented as a confidence-weighted
+re-base in lib/common.glsl:
+  - eclConf = smoothstep(0.0025, 0.16, |v|^2): the CONFIDENCE of the
+    smoothed state. Healthy single trigger -> 1. Rapid repeated commands /
+    abrupt environment shift -> collapses toward 0. Dead smooth() uniforms
+    -> permanently 0 (the old safety fallback, now gateless).
+  - timeAngle = native + shortestArc(eased - native) * eclConf: at
+    confidence 1 this is bit-for-bit the Iteration 31 eased glide; at
+    confidence 0 every accumulated interpolation offset is cleared and the
+    visual clock stands on FRESH NATIVE TIME -- baseline t=0, exactly like
+    the very first trigger. The engine state then re-converges around the
+    new target, confidence recovers, and the next command starts from a
+    clean instance.
+  - blissCloudTimeBase gets the same continuous re-base on the shortest
+    day offset (wrapped to +/-12000 ticks), so the cloud clock can never
+    flip discontinuously either.
+  - eclActive (consumed by the custom-cloud-speed paths, Iteration 31
+    structure) is now derived from the same confidence (> 0.5), so it
+    re-bases in lock-step after a flush.
+  - atan gets a +1e-6 guard on the cosine leg so the exact-origin state
+    (the moment of a full flush) can never produce NaN.
+No boolean sits in the visual-clock signal path -> nothing can snap; no
+low-magnitude angle path is ever followed -> nothing can freeze; every
+detected collapse (jump-on-jump) flushes the interpolator back to
+baseline -> each command behaves like the first.
+
+KEPT (verified -- the diff touches ONLY the common.glsl math block):
+  - All Iteration 34 configs: voxel volume sizes, GI_STRENGTH=2 /
+    GI_SAMPLE_COUNT=13, MAX_TRACE_COUNT=256 and the other path-tracing
+    parameters, SDF_UPDATE_INTERVAL=0, water/caustic style 4, profiles.
+  - profile.HIGH byte-identical (WATER_STYLE_DEFINE=4, LIGHT_COLOR_MULTS,
+    ECLIPSE_TIME_ACTIVE=2, TIME_TRANSITION_SPEED=7.0, ...).
+  - Legacy-code profile name (S1)(Sl)High+ (Default) / (S1)(Sl)Eleve+
+    (Defaut); both lang files remain raw-hex-free (grep clean).
+  - ECLIPSE_TIME_ACTIVE strict 3-state selector //[1 2 3], default 2
+    (Sky); mode 2 never touches wave speed, mode 3 warps waves with the
+    sky (eclipse_water.glsl untouched).
+
+VERIFICATION (Iteration 35)
+   - Healthy single trigger: eclConf == 1 -> bit-for-bit Iteration 31 glide  : PASS
+   - Collapsed state (repeated commands): continuous re-base to native,
+     no freeze path, no gate, no snap                                        : PASS
+   - Dead smooth() uniforms: confidence 0 -> native time (safety kept)       : PASS
+   - atan origin guarded (+1e-6) -> no NaN on full flush                     : PASS
+   - Cloud clock re-bases on shortest day offset (no discontinuous flip)     : PASS
+   - eclActive derived from confidence; cloud consumers unchanged            : PASS
+   - Diff limited to lib/common.glsl math block (configs/profiles/lang/
+     water untouched from Iteration 34)                                      : PASS
+   - Preprocessor conditionals balanced                                      : PASS
+=======================================================================

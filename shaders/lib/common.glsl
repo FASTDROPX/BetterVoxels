@@ -844,19 +844,39 @@
       // Slider 0.0 == OFF (Instant): skip easing entirely and snap like vanilla.
       const bool eclEnabled = (TIME_TRANSITION_SPEED > 0.05);
 
-      // ---- Iteration 34: calculation logic reverted to the Iteration 31
-      // exponential-decay structure. The Iteration 33 quintic gap-shaping and
-      // native-direction vector tracking are stripped out (reported to produce
-      // calculation overflows / instant freezes on time commands in the field).
-      // The engine-side smooth() uniforms already ARE the frame-rate-independent
-      // exponential easing (1 - exp(-t/tau), maintained by Iris across frames);
-      // the shader only reconstructs the angle with a single atan and runs RV's
-      // remap -- the exact lightweight math that handled world time jumps in
-      // Iteration 31. Safety: if the smooth() uniforms are unavailable (some
-      // setups) the (sin,cos) pair reads ~0; fall back to native time so the sky
-      // can never freeze -- it just stops easing.
+      // ---- Iteration 34/35: lightweight Iteration 31 exponential-decay
+      // structure (single atan of the engine-smoothed sin/cos pair + RV's
+      // remap; the smooth() uniforms ARE the frame-rate-independent
+      // 1 - exp(-t/tau) easing, maintained by Iris across frames).
+      //
+      // Iteration 35 -- HARD STATE FLUSH ON REPEATED TIME JUMPS. The stale
+      // state that broke back-to-back time commands is the smoothed vector's
+      // MAGNITUDE: each jump drags the (sin,cos) average across the interior
+      // of the unit circle, and when a 2nd/3rd command lands before the state
+      // re-converges, the leftover collapsed magnitude accumulates instead of
+      // flushing. The old hard gate (eclMag > 0.01 ? eased : native) turned
+      // that accumulation into the observed failure ladder: trigger 1 fluid
+      // (healthy state), trigger 2 frozen (angle lingering on a degenerate
+      // low-magnitude path), trigger 3 an instant snap (gate trip). GLSL
+      // cannot write the engine-side smooth() state, so the flush is done by
+      // RE-BASING: the eased angle's authority over the visual clock is
+      // weighted by the CONFIDENCE of the state -- its squared magnitude,
+      // mapped through a smoothstep. Healthy state (single fresh trigger,
+      // |v| near 1) -> weight 1: the pure Iteration 31 eased glide, bit-for-
+      // bit. Collapsed state (rapid repeated commands / abrupt environment
+      // shift) -> weight falls to 0: every accumulation variable is
+      // effectively cleared, and the visual clock re-bases CONTINUOUSLY to
+      // fresh native time -- baseline t=0, exactly like the very first
+      // trigger. The engine state then re-converges around the new target,
+      // confidence recovers, and the next command starts from a clean
+      // instance. No boolean sits in the signal path (nothing can snap) and
+      // no low-magnitude path is ever followed (nothing can freeze). Dead
+      // smooth() uniforms read as permanent zero confidence -> native time,
+      // preserving the old safety fallback. The +1e-6 keeps atan defined at
+      // the exact origin so the flush path can never produce NaN.
       float eclMag = blissSunAngleS * blissSunAngleS + blissSunAngleC * blissSunAngleC;
-      float eclSunAngle = fract(atan(blissSunAngleS, blissSunAngleC) * 0.15915494309189535); // /(2*pi)
+      float eclConf = eclEnabled ? smoothstep(0.0025, 0.16, eclMag) : 0.0;
+      float eclSunAngle = fract(atan(blissSunAngleS, blissSunAngleC + 1.0e-6) * 0.15915494309189535); // /(2*pi)
       float eTAmin = fract(eclSunAngle - 0.033333333);
       float eTAlin = eTAmin < 0.433333333 ? eTAmin * 1.15384615385 : eTAmin * 0.882352941176 + 0.117647058824;
       float eHA    = eTAlin > 0.5 ? 1.0 : 0.0;
@@ -864,13 +884,20 @@
       float eTAfrs = eTAfrc * eTAfrc * (3.0 - 2.0 * eTAfrc);
       float eTAmix = eHA < 0.5 ? 0.3 : -0.1;
       float eclEasedTimeAngle = (eTAfrc * (1.0 - eTAmix) + eTAfrs * eTAmix + eHA) * 0.5;
-      bool eclActive = eclEnabled && (eclMag > 0.01);
-      float timeAngle = eclActive ? eclEasedTimeAngle : blissNativeTimeAngle;
-      // Cloud clock rides the eased visual angle so clouds warp WITH the sun at
-      // exactly the slider-selected speed (Iteration 31 structure).
-      float blissCloudTimeBase = eclActive
-          ? (mod(worldDay, 100) * 24000.0 + eclSunAngle * 24000.0)
-          : (worldTime + mod(worldDay, 100) * 24000.0);
+      // Wrap-aware re-base: fresh native baseline + shortest-arc offset scaled
+      // by confidence (the flush weight).
+      float eclTimeD = fract(eclEasedTimeAngle - blissNativeTimeAngle + 0.5) - 0.5;
+      float timeAngle = fract(blissNativeTimeAngle + eclTimeD * eclConf);
+      // Kept for the custom-cloud-speed consumers (Iteration 31 structure);
+      // derived from the same confidence so it also re-bases after a flush.
+      bool eclActive = eclConf > 0.5;
+      // Cloud clock: the same continuous re-base, on the shortest day offset,
+      // so it can never flip clocks discontinuously mid-transition.
+      float eclCloudNative = worldTime + mod(worldDay, 100) * 24000.0;
+      float eclCloudEased  = mod(worldDay, 100) * 24000.0 + eclSunAngle * 24000.0;
+      float eclCloudD = eclCloudEased - eclCloudNative;
+      eclCloudD -= 24000.0 * floor(eclCloudD / 24000.0 + 0.5); // wrap to +/-12000
+      float blissCloudTimeBase = eclCloudNative + eclCloudD * eclConf;
     #else
       float timeAngle = blissNativeTimeAngle;
       float blissCloudTimeBase = (worldTime + mod(worldDay, 100) * 24000.0);
