@@ -54,7 +54,5 @@ Originally built to transform standard volumetric lighting into an analog horror
 
 This project is a legal modified fork compliant with the **Complementary Agreement 1.3** / original shader licenses. 
 * Core Voxel Architecture based on Complementary / Rethinking Voxels.
-* Vertex Deformations and Wind Math ported/adapted from **Photon Shader**[cite: 1].
-* Heat Wave / Atmospheric Refraction algorithms adapted from **Bliss Shader**[cite: 1].
 
 *Developed with passion for tactical realism, analog horror creators, and immersion enthusiasts.*
