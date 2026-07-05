@@ -1,26 +1,13 @@
 /*
 =======================================================================
-  Bliss -> Rethinking Voxels  |  CLOUD COMPATIBILITY SHIM
-=======================================================================
-  Purpose:
-    The ported Bliss volumetric-cloud code (bliss_clouds.glsl) reads a
-    number of #defines, atmosphere constants and light vectors that exist
-    in the Bliss (Chocapic13) base but NOT in the Rethinking Voxels
-    (Complementary Reimagined) base. This header declares / initialises
-    every one of them so the ported code links cleanly.
 
-    All numeric values are copied verbatim from
-    Bliss v2.1.2 -> shaders/lib/settings.glsl  (defaults).
-
-    This directly fixes the previous failure class, e.g.
-        error C1503: undefined variable "sky_coefficientRayleighR"
 =======================================================================
 */
 #ifndef BLISS_CLOUDS_COMPAT_GLSL
 #define BLISS_CLOUDS_COMPAT_GLSL
 
 // ---------------------------------------------------------------------
-// Feature toggles (Bliss defaults)
+// Feature toggles
 // ---------------------------------------------------------------------
 #define VOLUMETRIC_CLOUDS
 #define HQ_CLOUDS
@@ -35,7 +22,7 @@
 //   CLOUDSHADOWSONLY, WEATHERCLOUDS, TEST
 
 // ---------------------------------------------------------------------
-// Ray-march quality (Bliss defaults)
+// Ray-march quality
 // ---------------------------------------------------------------------
 #define minRayMarchSteps 15
 #define maxRayMarchSteps 15
@@ -56,14 +43,14 @@
 #define CLOUD_SHADOW_STRENGTH 1.0
 
 // ---------------------------------------------------------------------
-// fBm / noise shaping (Bliss defaults)
+// fBm / noise shaping
 // ---------------------------------------------------------------------
 #define fbmAmount 0.5
 #define fbmPower1 3.00
 #define fbmPower2 2.50
 
 // ---------------------------------------------------------------------
-// Atmosphere constants (Bliss defaults).
+// Atmosphere constants
 // Bliss colours its clouds from a Rayleigh-ish scattering term; RV has
 // no such constants, so we provide them here with the original values.
 // ---------------------------------------------------------------------
@@ -89,4 +76,4 @@
 vec3  WsunVec      = vec3(0.0, 1.0, 0.0);
 float sunElevation = 1.0;
 
-#endif // BLISS_CLOUDS_COMPAT_GLSL
+#endif
