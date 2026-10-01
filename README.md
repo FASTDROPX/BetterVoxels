@@ -72,3 +72,13 @@ Eight quality profiles from Potato to Ultra Max. An Optimization tab of cost con
   * **LoLip_p** for BodyCam Mode
  
  //EWZ
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=fastdropx%2Fbettervoxels&type=date&legend=top-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=fastdropx/bettervoxels&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=fastdropx/bettervoxels&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=fastdropx/bettervoxels&type=date&legend=bottom-right" />
+ </picture>
+</a>
